@@ -1,20 +1,21 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom"; // Import useNavigate
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "../../css/login.css";
 
 function Login() {
-  const [email, setEmail] = useState(""); // Đổi tên state cho đồng bộ với backend
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
+  const navigate = useNavigate(); // Hook chuyển trang mượt mà
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage(""); // Reset thông báo cũ
+    setMessage("");
 
     try {
-      // Gửi đúng field 'email' mà Backend yêu cầu
       const res = await axios.post("http://localhost:5000/api/login", {
         email,
         password,
@@ -23,21 +24,28 @@ function Login() {
       if (res.data.success) {
         setIsSuccess(true);
         setMessage("Đăng nhập thành công!");
-        localStorage.setItem("user", JSON.stringify(res.data.user));
 
+        // Lưu thông tin đồng bộ vào cả sessionStorage và localStorage
+        const userData = JSON.stringify(res.data.user);
+        sessionStorage.setItem("user", userData);
+        localStorage.setItem("user", userData);
+
+        // Chuyển hướng mượt sang /dashboard mà không load lại trang
         setTimeout(() => {
-          window.location.href = "/dashboard";
-        }, 1000);
+          navigate("/dashboard");
+        }, 800);
       }
     } catch (error) {
       console.error(error);
       setIsSuccess(false);
 
-      // Nếu có phản hồi từ Server (ví dụ: lỗi 400, 401 do sai email/mật khẩu)
-      if (error.response && error.response.data && error.response.data.message) {
+      if (
+        error.response &&
+        error.response.data &&
+        error.response.data.message
+      ) {
         setMessage(error.response.data.message);
       } else {
-        // Lỗi không kết nối được đến Server (Server tắt, sai port, lỗi mạng)
         setMessage("Không thể kết nối đến server!");
       }
     }
