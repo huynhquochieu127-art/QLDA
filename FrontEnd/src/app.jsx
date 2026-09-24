@@ -6,28 +6,54 @@ import {
   Navigate,
 } from "react-router-dom";
 import Login from "./pages/Login";
+import Home from "./pages/home";
+
+// 1. Kiểm tra nếu chưa đăng nhập thì đẩy về trang /login
+const ProtectedRoute = ({ children }) => {
+  const user = sessionStorage.getItem("user");
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
+
+// 2. Nếu đã đăng nhập rồi thì không cho vào lại /login, tự nhảy sang /dashboard
+const PublicRoute = ({ children }) => {
+  const user = sessionStorage.getItem("user");
+  if (user) {
+    return <Navigate to="/home" replace />;
+  }
+  return children;
+};
 
 function App() {
   return (
     <Router>
       <Routes>
-        {/* Đặt trang Đăng nhập làm trang gốc (hiển thị đầu tiên) */}
-        <Route path="/" element={<Login />} />
+        {/* Mặc định vào trang chủ /dashboard */}
+        <Route path="/" element={<Navigate to="/home" replace />} />
 
-        {/* Nếu người dùng vào /login cũng hiển thị trang Login */}
-        <Route path="/login" element={<Login />} />
-
-        {/* Trang chủ / Dashboard sau khi đăng nhập thành công */}
+        {/* Trang Đăng nhập */}
         <Route
-          path="/dashboard"
+          path="/login"
           element={
-            <div className="container text-center mt-5">
-              <h1>Chào mừng bạn đến với Trang Chủ Quản Lý Cà Phê!</h1>
-            </div>
+            <PublicRoute>
+              <Login />
+            </PublicRoute>
           }
         />
 
-        {/* Nhập đường dẫn sai sẽ tự động chuyển hướng về trang Đăng nhập */}
+        {/* Trang Home / Dashboard */}
+        <Route
+          path="/home"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Đường dẫn sai tự động điều hướng */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
