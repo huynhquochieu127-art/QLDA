@@ -6,36 +6,42 @@ import {
   User,
   LogOut,
   DollarSign,
-  FileEdit,
-  Bell,
-  X,
-  TrendingUp,
   Coffee,
+  Users,
+  Calendar,
+  CheckSquare,
+  ShoppingCart,
+  Bot,
+  BarChart2,
+  FileText,
+  Download,
+  Upload,
+  TestTube,
+  Home as HomeIcon,
+  Search,
+  Bell,
+  PlusCircle,
+  TrendingUp,
+  FileSpreadsheet,
 } from "lucide-react";
-import axios from "axios";
 
 export default function Home() {
   const navigate = useNavigate();
 
-  // Lấy thông tin người dùng từ SessionStorage
-  const userStr = sessionStorage.getItem("user");
-  const user = userStr ? JSON.parse(userStr) : null;
-  const userRole = user ? String(user.MaVaiTro || user.role || "2") : "2";
+  // Lấy thông tin người dùng từ storage
+  const userStr =
+    sessionStorage.getItem("user") || localStorage.getItem("user");
+  const user = userStr
+    ? JSON.parse(userStr)
+    : { name: "Nguyễn Hải Hậu", role: "Admin" };
+
+  // Quản lý tab đang chọn
+  const [activeTab, setActiveTab] = useState("dashboard");
 
   // Đồng hồ thời gian thực
   const [currentTime, setCurrentTime] = useState(
     new Date().toLocaleTimeString("vi-VN"),
   );
-  const today = new Date();
-  const dateFormatted = today.toLocaleDateString("vi-VN", {
-    weekday: "long",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-  const todayStr = today.toLocaleDateString("sv-SE", {
-    timeZone: "Asia/Ho_Chi_Minh",
-  });
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -44,413 +50,336 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
-  // State Chấm công
-  const [isCheckedIn, setIsCheckedIn] = useState(false);
-  const [checkInTime, setCheckInTime] = useState("-");
-  const [totalHours, setTotalHours] = useState("0.00");
-  const [checkInTimestamp, setCheckInTimestamp] = useState(null);
-
-  // State Modal
-  const [showPayslipModal, setShowPayslipModal] = useState(false);
-  const [showRequestModal, setShowRequestModal] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-
-  // State Phiếu lương
-  const [payslipMonth, setPayslipMonth] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  });
-
-  // State Yêu cầu nhân sự
-  const [requestCategory, setRequestCategory] = useState("bosung");
-  const [requestDate, setRequestDate] = useState(todayStr);
-  const [requestReason, setRequestReason] = useState("");
-
-  // State Thông báo
-  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
-
-  // State Admin Stats
-  const [adminStats] = useState({
-    totalEmployees: 12,
-    todayShifts: 8,
-    pendingRequests: 3,
-    revenueToday: 3550000,
-  });
-
-  // Tải dữ liệu ban đầu
-  useEffect(() => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
-
-    const fetchTodayStatus = async () => {
-      try {
-        const res = await axios.get(
-          `https://quanlynhansucf.onrender.com/api/timekeeping/today-status?employeeId=${user.MaTaiKhoan}`,
-        );
-        if (res.data?.success) {
-          setIsCheckedIn(res.data.data.isCheckedIn);
-          setCheckInTime(res.data.data.checkInTime || "-");
-          if (res.data.data.checkInTimestamp) {
-            setCheckInTimestamp(res.data.data.checkInTimestamp);
-          }
-        }
-      } catch (err) {
-        console.log("Sử dụng chế độ demo chấm công local");
-      }
-    };
-
-    fetchTodayStatus();
-  }, [user, navigate]);
-
-  // Bộ đếm giờ làm việc
-  useEffect(() => {
-    let interval = null;
-    if (isCheckedIn && checkInTimestamp) {
-      interval = setInterval(() => {
-        const diff = new Date() - new Date(checkInTimestamp);
-        setTotalHours((diff / (1000 * 60 * 60)).toFixed(2));
-      }, 60000);
-
-      const diff = new Date() - new Date(checkInTimestamp);
-      setTotalHours((diff / (1000 * 60 * 60)).toFixed(2));
-    } else {
-      setTotalHours("0.00");
-    }
-    return () => clearInterval(interval);
-  }, [isCheckedIn, checkInTimestamp]);
-
-  // Xử lý Check-in / Check-out
-  const handleToggleCheckIn = () => {
-    if (!isCheckedIn) {
-      const timeStr = new Date().toLocaleTimeString("vi-VN", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      setIsCheckedIn(true);
-      setCheckInTime(timeStr);
-      setCheckInTimestamp(new Date().getTime());
-    } else {
-      setIsCheckedIn(false);
-      setCheckInTimestamp(null);
-    }
-  };
-
   // Xử lý Đăng xuất
   const handleLogout = () => {
     sessionStorage.clear();
+    localStorage.clear();
     navigate("/login");
   };
 
-  // Format Tiền tệ VND
-  const formatVND = (amount) =>
-    new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(amount || 0);
-
   return (
-    <div className="home-page">
-      <div className="home-container">
-        {/* 1. THANH HEADER TOPBAR */}
-        <header className="home-header">
-          <div className="header-brand">
-            <div className="brand-icon-wrapper">
-              <Coffee size={24} />
-            </div>
-            <div>
-              <h1 className="brand-title">Quán Cà Phê - Trang Chủ</h1>
-              <p className="brand-subtitle">
-                Xin chào,{" "}
-                <strong>
-                  {user?.HoTen || user?.TenDangNhap || "Nhân viên"}
-                </strong>{" "}
-                | {dateFormatted} ({currentTime})
-              </p>
-            </div>
+    <div className="home-container">
+      {/* ================= SIDEBAR ================= */}
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <Coffee className="brand-icon" size={28} />
+          <h2>QuanLyCF</h2>
+        </div>
+
+        <nav className="sidebar-nav">
+          <button
+            className={`nav-item ${activeTab === "dashboard" ? "active" : ""}`}
+            onClick={() => setActiveTab("dashboard")}
+          >
+            <HomeIcon size={18} /> <span>Trang chủ / Dashboard</span>
+          </button>
+
+          <div className="nav-group-title">QUẢN LÝ DỰ ÁN</div>
+
+          <button
+            className={`nav-item ${activeTab === "hr" ? "active" : ""}`}
+            onClick={() => setActiveTab("hr")}
+          >
+            <Users size={18} /> <span>Quản lý nhân sự</span>
+          </button>
+
+          <button
+            className={`nav-item ${activeTab === "shifts" ? "active" : ""}`}
+            onClick={() => setActiveTab("shifts")}
+          >
+            <Calendar size={18} /> <span>Quản lý ca làm</span>
+          </button>
+
+          <button
+            className={`nav-item ${activeTab === "attendance" ? "active" : ""}`}
+            onClick={() => setActiveTab("attendance")}
+          >
+            <CheckSquare size={18} /> <span>Chấm công</span>
+          </button>
+
+          <button
+            className={`nav-item ${activeTab === "products" ? "active" : ""}`}
+            onClick={() => setActiveTab("products")}
+          >
+            <Coffee size={18} /> <span>Quản lý đồ uống</span>
+          </button>
+
+          <button
+            className={`nav-item ${activeTab === "orders" ? "active" : ""}`}
+            onClick={() => setActiveTab("orders")}
+          >
+            <ShoppingCart size={18} /> <span>Quản lý bán hàng</span>
+          </button>
+
+          <div className="nav-group-title">NÂNG CAO & BÁO CÁO</div>
+
+          <button
+            className={`nav-item ${activeTab === "ai" ? "active" : ""}`}
+            onClick={() => setActiveTab("ai")}
+          >
+            <Bot size={18} /> <span>AI / ML Gợi ý</span>
+          </button>
+
+          <button
+            className={`nav-item ${activeTab === "reports" ? "active" : ""}`}
+            onClick={() => setActiveTab("reports")}
+          >
+            <BarChart2 size={18} /> <span>Thống kê & Báo cáo</span>
+          </button>
+
+          <button
+            className={`nav-item ${activeTab === "data" ? "active" : ""}`}
+            onClick={() => setActiveTab("data")}
+          >
+            <Download size={18} /> <span>Import / Export</span>
+          </button>
+
+          <button
+            className={`nav-item ${activeTab === "testing" ? "active" : ""}`}
+            onClick={() => setActiveTab("testing")}
+          >
+            <TestTube size={18} /> <span>Kiểm thử hệ thống</span>
+          </button>
+        </nav>
+
+        <div className="sidebar-footer">
+          <button className="logout-btn" onClick={handleLogout}>
+            <LogOut size={18} /> <span>Đăng xuất</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* ================= MAIN CONTENT ================= */}
+      <main className="main-content">
+        {/* Header trên cùng */}
+        <header className="main-header">
+          <div className="search-bar">
+            <Search size={18} />
+            <input type="text" placeholder="Tìm kiếm / Lọc dữ liệu..." />
           </div>
 
-          <div className="header-actions">
-            {/* Nút Chuông thông báo */}
-            <div className="notif-wrapper">
-              <button
-                onClick={() => setShowNotifDropdown(!showNotifDropdown)}
-                className="btn btn-icon-only"
-                aria-label="Thông báo"
-              >
-                <Bell size={20} />
-              </button>
-
-              {showNotifDropdown && (
-                <div className="notif-dropdown">
-                  <p className="notif-dropdown-title">Thông báo mới</p>
-                  <p className="notif-dropdown-empty">
-                    Không có thông báo mới nào.
-                  </p>
-                </div>
-              )}
+          <div className="header-right">
+            <div className="clock-badge">
+              <Clock size={16} />
+              <span>{currentTime}</span>
             </div>
 
-            {/* Nút Hồ sơ cá nhân */}
-            <button
-              onClick={() => setShowProfileModal(true)}
-              className="btn btn-secondary"
-            >
-              <User size={16} style={{ color: "var(--amber-600)" }} />
-              Hồ sơ
+            <button className="icon-btn">
+              <Bell size={18} />
             </button>
 
-            {/* Nút Đăng xuất */}
-            <button onClick={handleLogout} className="btn btn-danger">
-              <LogOut size={16} />
-              Đăng xuất
-            </button>
+            <div className="user-profile">
+              <User size={20} />
+              <div className="user-info">
+                <span className="user-name">
+                  {user.name || user.TenNguoiDung || "Hải Hậu"}
+                </span>
+                <span className="user-role">
+                  {user.role || "Quản trị viên"}
+                </span>
+              </div>
+            </div>
           </div>
         </header>
 
-        {/* 2. KHU VỰC THẺ CHÍNH (CARDS GRID) */}
-        <div className="cards-grid">
-          {/* CHẤM CÔNG HÔM NAY */}
-          <div className="card card-checkin">
-            <div>
-              <div className="checkin-header">
-                <span className="checkin-tag">Ca làm việc hôm nay</span>
-                <Clock size={22} style={{ opacity: 0.8 }} />
+        {/* Nội dung thay đổi theo Tab */}
+        <div className="content-body">
+          {activeTab === "dashboard" && (
+            <div className="dashboard-view">
+              <div className="view-header">
+                <h1>Tổng quan hệ thống</h1>
+                <p>Hệ thống Quản lý Quán Cà phê (QuanLyCF)</p>
               </div>
-              <p className="checkin-status">
-                {isCheckedIn ? "Đang Trong Ca" : "Chưa Check-in"}
+
+              {/* Các Thẻ Thống Kê Nhanh */}
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <div className="stat-icon revenue">
+                    <DollarSign />
+                  </div>
+                  <div className="stat-info">
+                    <span>Doanh thu hôm nay</span>
+                    <h3>3,250,000 VNĐ</h3>
+                  </div>
+                </div>
+
+                <div className="stat-card">
+                  <div className="stat-icon orders">
+                    <ShoppingCart />
+                  </div>
+                  <div className="stat-info">
+                    <span>Đơn hàng</span>
+                    <h3>54 đơn</h3>
+                  </div>
+                </div>
+
+                <div className="stat-card">
+                  <div className="stat-icon staff">
+                    <Users />
+                  </div>
+                  <div className="stat-info">
+                    <span>Nhân sự ca này</span>
+                    <h3>6 / 12</h3>
+                  </div>
+                </div>
+
+                <div className="stat-card">
+                  <div className="stat-icon ai">
+                    <Bot />
+                  </div>
+                  <div className="stat-info">
+                    <span>Gợi ý AI bán chạy</span>
+                    <h3>Cà phê Muối</h3>
+                  </div>
+                </div>
+              </div>
+
+              {/* Danh sách các Mô-đun Tính năng */}
+              <div className="features-section">
+                <h2>Danh mục tính năng hệ thống</h2>
+                <div className="modules-grid">
+                  {/* Quản lý Nhân sự */}
+                  <div className="module-card">
+                    <div className="card-header">
+                      <Users className="icon" />
+                      <h3>Quản lý Nhân sự</h3>
+                    </div>
+                    <ul>
+                      <li>
+                        <PlusCircle size={14} /> Thêm / Sửa / Xóa nhân viên
+                      </li>
+                      <li>
+                        <Search size={14} /> Tìm kiếm & Lọc nhân sự
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Quản lý Ca làm */}
+                  <div className="module-card">
+                    <div className="card-header">
+                      <Calendar className="icon" />
+                      <h3>Quản lý Ca làm</h3>
+                    </div>
+                    <ul>
+                      <li>
+                        <PlusCircle size={14} /> Tạo & Phân ca làm việc
+                      </li>
+                      <li>
+                        <Calendar size={14} /> Xem lịch & Sửa/xóa ca
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Chấm công */}
+                  <div className="module-card">
+                    <div className="card-header">
+                      <CheckSquare className="icon" />
+                      <h3>Chấm công</h3>
+                    </div>
+                    <ul>
+                      <li>
+                        <CheckSquare size={14} /> Check-in / Check-out
+                      </li>
+                      <li>
+                        <Clock size={14} /> Thống kê đi trễ / về sớm
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Quản lý Đồ uống */}
+                  <div className="module-card">
+                    <div className="card-header">
+                      <Coffee className="icon" />
+                      <h3>Quản lý Sản phẩm</h3>
+                    </div>
+                    <ul>
+                      <li>
+                        <PlusCircle size={14} /> CRUD Danh mục & Đồ uống
+                      </li>
+                      <li>
+                        <Search size={14} /> Tìm kiếm & Lọc sản phẩm
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Quản lý Bán hàng */}
+                  <div className="module-card">
+                    <div className="card-header">
+                      <ShoppingCart className="icon" />
+                      <h3>Quản lý Bán hàng</h3>
+                    </div>
+                    <ul>
+                      <li>
+                        <PlusCircle size={14} /> Tạo đơn & Quản lý trạng thái
+                      </li>
+                      <li>
+                        <TrendingUp size={14} /> Theo dõi doanh thu thời gian
+                        thực
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* AI / ML */}
+                  <div className="module-card highlight">
+                    <div className="card-header">
+                      <Bot className="icon" />
+                      <h3>Mô hình AI / ML</h3>
+                    </div>
+                    <ul>
+                      <li>
+                        <Bot size={14} /> Gợi ý đồ uống theo xu hướng
+                      </li>
+                      <li>
+                        <TrendingUp size={14} /> Gợi ý dựa trên lịch sử mua hàng
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Báo cáo & Xuất dữ liệu */}
+                  <div className="module-card">
+                    <div className="card-header">
+                      <FileText className="icon" />
+                      <h3>Báo cáo & Dữ liệu</h3>
+                    </div>
+                    <ul>
+                      <li>
+                        <FileSpreadsheet size={14} /> Xuất PDF / Xuất Excel
+                      </li>
+                      <li>
+                        <Upload size={14} /> Import / Export dữ liệu
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Kiểm thử */}
+                  <div className="module-card">
+                    <div className="card-header">
+                      <TestTube className="icon" />
+                      <h3>Kiểm thử Hệ thống</h3>
+                    </div>
+                    <ul>
+                      <li>
+                        <TestTube size={14} /> Test API & Luồng dữ liệu
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Các giao diện phụ khi nhấn Sidebar */}
+          {activeTab !== "dashboard" && (
+            <div className="tab-placeholder">
+              <h2>Mô-đun: {activeTab.toUpperCase()}</h2>
+              <p>
+                Nội dung chi tiết cho trang này đang được kết nối với Backend
+                API...
               </p>
-              <p className="checkin-details">
-                Giờ vào: <strong>{checkInTime}</strong> | Đã làm:{" "}
-                <strong>{totalHours} giờ</strong>
-              </p>
             </div>
-
-            <button
-              onClick={handleToggleCheckIn}
-              className={`btn-checkin-toggle ${
-                isCheckedIn ? "is-active" : "not-active"
-              }`}
-            >
-              {isCheckedIn
-                ? "KẾT THÚC CA (CHECK-OUT)"
-                : "BẮT ĐẦU CA (CHECK-IN)"}
-            </button>
-          </div>
-
-          {/* PHIẾU LƯƠNG CÁ NHÂN */}
-          <div className="card">
-            <div>
-              <div className="card-header-info">
-                <div className="card-icon-badge emerald">
-                  <DollarSign size={20} />
-                </div>
-                <div>
-                  <h3 className="card-title">Phiếu Lương Cá Nhân</h3>
-                  <p className="card-description">
-                    Tra cứu bảng lương hàng tháng
-                  </p>
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowPayslipModal(true)}
-              className="btn btn-emerald"
-            >
-              Xem chi tiết phiếu lương
-            </button>
-          </div>
-
-          {/* YÊU CẦU NHÂN SỰ */}
-          <div className="card">
-            <div>
-              <div className="card-header-info">
-                <div className="card-icon-badge blue">
-                  <FileEdit size={20} />
-                </div>
-                <div>
-                  <h3 className="card-title">Yêu Cầu Nhân Sự</h3>
-                  <p className="card-description">
-                    Xin nghỉ, bổ sung công, đổi ca
-                  </p>
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowRequestModal(true)}
-              className="btn btn-blue"
-            >
-              Tạo đơn yêu cầu
-            </button>
-          </div>
+          )}
         </div>
-
-        {/* 3. KHU VỰC THỐNG KÊ QUẢN LÝ (CHO ADMIN) */}
-        {userRole === "1" && (
-          <div className="admin-section">
-            <h2 className="admin-title">
-              <TrendingUp size={18} style={{ color: "var(--amber-500)" }} />
-              Thống kê quản lý quán Cà Phê
-            </h2>
-            <div className="stats-grid">
-              <div className="stat-item">
-                <p className="stat-label">Tổng nhân viên</p>
-                <p className="stat-value">{adminStats.totalEmployees}</p>
-              </div>
-              <div className="stat-item">
-                <p className="stat-label">Ca làm hôm nay</p>
-                <p className="stat-value amber">{adminStats.todayShifts}</p>
-              </div>
-              <div className="stat-item">
-                <p className="stat-label">Đơn chờ duyệt</p>
-                <p className="stat-value blue">{adminStats.pendingRequests}</p>
-              </div>
-              <div className="stat-item">
-                <p className="stat-label">Doanh thu dự kiến</p>
-                <p className="stat-value emerald">
-                  {formatVND(adminStats.revenueToday)}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* MODAL PHIẾU LƯƠNG */}
-        {showPayslipModal && (
-          <div className="modal-overlay">
-            <div className="modal-content">
-              <button
-                onClick={() => setShowPayslipModal(false)}
-                className="modal-close-btn"
-              >
-                <X size={20} />
-              </button>
-              <h3 className="modal-title">Chi tiết phiếu lương</h3>
-              <div className="form-group">
-                <label className="form-label">Chọn tháng:</label>
-                <input
-                  type="month"
-                  value={payslipMonth}
-                  onChange={(e) => setPayslipMonth(e.target.value)}
-                  className="form-input"
-                  style={{ fontWeight: "bold" }}
-                />
-              </div>
-              <div>
-                <div className="detail-row">
-                  <label>Lương cơ bản:</label>
-                  <strong>{formatVND(4500000)}</strong>
-                </div>
-                <div className="detail-row">
-                  <label>Thưởng / Phụ cấp ca:</label>
-                  <strong style={{ color: "var(--emerald-600)" }}>
-                    {formatVND(500000)}
-                  </strong>
-                </div>
-                <div className="detail-row">
-                  <label>Khấu trừ:</label>
-                  <strong style={{ color: "var(--red-500)" }}>
-                    {formatVND(0)}
-                  </strong>
-                </div>
-                <div className="detail-row-highlight">
-                  <span>Thực nhận:</span>
-                  <span>{formatVND(5000000)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* MODAL YÊU CẦU */}
-        {showRequestModal && (
-          <div className="modal-overlay">
-            <div className="modal-content">
-              <button
-                onClick={() => setShowRequestModal(false)}
-                className="modal-close-btn"
-              >
-                <X size={20} />
-              </button>
-              <h3 className="modal-title">Tạo đơn yêu cầu mới</h3>
-              <div className="form-group">
-                <label className="form-label">Loại yêu cầu</label>
-                <select
-                  value={requestCategory}
-                  onChange={(e) => setRequestCategory(e.target.value)}
-                  className="form-select"
-                >
-                  <option value="bosung">Bổ sung điểm danh</option>
-                  <option value="xinnghi">Xin nghỉ ca làm</option>
-                  <option value="doica">Xin đổi ca</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Ngày áp dụng</label>
-                <input
-                  type="date"
-                  value={requestDate}
-                  onChange={(e) => setRequestDate(e.target.value)}
-                  className="form-input"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Lý do</label>
-                <textarea
-                  rows="3"
-                  value={requestReason}
-                  onChange={(e) => setRequestReason(e.target.value)}
-                  placeholder="Nhập lý do trình báo..."
-                  className="form-textarea"
-                />
-              </div>
-              <button
-                onClick={() => {
-                  alert("Đã gửi yêu cầu thành công!");
-                  setShowRequestModal(false);
-                }}
-                className="btn btn-blue"
-              >
-                Gửi đơn
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* MODAL HỒ SƠ CÁ NHÂN */}
-        {showProfileModal && (
-          <div className="modal-overlay">
-            <div className="modal-content" style={{ maxWidth: 360 }}>
-              <button
-                onClick={() => setShowProfileModal(false)}
-                className="modal-close-btn"
-              >
-                <X size={20} />
-              </button>
-              <h3 className="modal-title">Hồ sơ nhân viên</h3>
-              <div>
-                <div className="detail-row">
-                  <label>Mã tài khoản:</label>
-                  <strong>{user?.MaTaiKhoan || user?.id || "NV001"}</strong>
-                </div>
-                <div className="detail-row">
-                  <label>Họ và tên:</label>
-                  <strong>
-                    {user?.HoTen || user?.TenDangNhap || "Chưa cập nhật"}
-                  </strong>
-                </div>
-                <div className="detail-row">
-                  <label>Chức vụ / Vai trò:</label>
-                  <strong style={{ color: "var(--amber-600)" }}>
-                    {userRole === "1" ? "Quản lý / Admin" : "Nhân viên quán"}
-                  </strong>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      </main>
     </div>
   );
 }
