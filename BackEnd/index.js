@@ -75,7 +75,7 @@ app.post("/api/login", (req, res) => {
       }
 
       if (isMatch) {
-        delete user.MatKhau; // Ẩn mật khẩu trước khi gửi về client
+        delete user.MatKhau; // Ẩn mật khẩu trước khi gửi về client 1
 
         return res.json({
           success: true,
