@@ -1,26 +1,36 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+import React from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+import Login from "./pages/Login";
 
 function App() {
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    // Gọi API sang BackEnd
-    axios
-      .get("http://localhost:5000/api/test")
-      .then((response) => {
-        setMessage(response.data.message); // Nhận chuỗi từ BackEnd gửi về
-      })
-      .catch((error) => {
-        console.error("Lỗi kết nối BackEnd:", error);
-      });
-  }, []);
-
   return (
-    <div style={{ padding: "20px", textAlign: "center" }}>
-      <h1>Kết quả từ BackEnd:</h1>
-      <h2 style={{ color: "green" }}>{message || "Đang kết nối..."}</h2>
-    </div>
+    <Router>
+      <Routes>
+        {/* Đặt trang Đăng nhập làm trang gốc (hiển thị đầu tiên) */}
+        <Route path="/" element={<Login />} />
+
+        {/* Nếu người dùng vào /login cũng hiển thị trang Login */}
+        <Route path="/login" element={<Login />} />
+
+        {/* Trang chủ / Dashboard sau khi đăng nhập thành công */}
+        <Route
+          path="/dashboard"
+          element={
+            <div className="container text-center mt-5">
+              <h1>Chào mừng bạn đến với Trang Chủ Quản Lý Cà Phê!</h1>
+            </div>
+          }
+        />
+
+        {/* Nhập đường dẫn sai sẽ tự động chuyển hướng về trang Đăng nhập */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Router>
   );
 }
 
