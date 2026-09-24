@@ -4,16 +4,19 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import "../../css/login.css";
 
 function Login() {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState(""); // Đổi tên state cho đồng bộ với backend
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setMessage(""); // Reset thông báo cũ
+
     try {
+      // Gửi đúng field 'email' mà Backend yêu cầu
       const res = await axios.post("http://localhost:5000/api/login", {
-        username,
+        email,
         password,
       });
 
@@ -25,14 +28,18 @@ function Login() {
         setTimeout(() => {
           window.location.href = "/dashboard";
         }, 1000);
-      } else {
-        setIsSuccess(false);
-        setMessage(res.data.message);
       }
     } catch (error) {
       console.error(error);
       setIsSuccess(false);
-      setMessage("Không thể kết nối đến server!");
+
+      // Nếu có phản hồi từ Server (ví dụ: lỗi 400, 401 do sai email/mật khẩu)
+      if (error.response && error.response.data && error.response.data.message) {
+        setMessage(error.response.data.message);
+      } else {
+        // Lỗi không kết nối được đến Server (Server tắt, sai port, lỗi mạng)
+        setMessage("Không thể kết nối đến server!");
+      }
     }
   };
 
@@ -42,7 +49,7 @@ function Login() {
         {/* Logo biểu tượng ly cà phê */}
         <div className="coffee-logo-badge">☕</div>
 
-        <h3 className="login-title">Coffee </h3>
+        <h3 className="login-title">Coffee</h3>
         <p className="login-subtitle">Hệ thống Quản lý Cửa hàng Cà Phê</p>
 
         <div className="coffee-divider">
@@ -64,9 +71,9 @@ function Login() {
             <input
               type="text"
               className="form-control"
-              placeholder="Nhập tên đăng nhập..."
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Nhập email đăng nhập..."
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
