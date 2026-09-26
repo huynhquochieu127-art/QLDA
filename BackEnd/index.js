@@ -3,6 +3,8 @@ const express = require("express");
 const cors = require("cors");
 const mysql = require("mysql2");
 const bcrypt = require("bcrypt"); // 1. Import bcrypt
+const jwt = require("jsonwebtoken");
+const { verifyToken, verifyRole } = require("./middleware/authMiddleware");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -77,10 +79,18 @@ app.post("/api/login", (req, res) => {
       if (isMatch) {
         delete user.MatKhau; // Ẩn mật khẩu trước khi gửi về client 1
 
+        // Tạo JWT Token
+        const accessToken = jwt.sign(
+          { ...user },
+          process.env.JWT_SECRET || "fallback_secret_key",
+          { expiresIn: "1d" } // Token hết hạn sau 1 ngày
+        );
+
         return res.json({
           success: true,
           message: "Đăng nhập thành công!",
           user: user,
+          accessToken: accessToken,
         });
       } else {
         return res.status(401).json({
@@ -93,6 +103,19 @@ app.post("/api/login", (req, res) => {
       return res.status(500).json({ success: false, message: "Lỗi xử lý mật khẩu!" });
     }
   });
+});
+
+// --- CÁC API CẦN BẢO VỆ (SỬ DỤNG MIDDLEWARE) ---
+
+// 1. API yêu cầu đăng nhập (có token hợp lệ)
+app.get("/api/protected", verifyToken, (req, res) => {
+  res.json({ success: true, message: "Truy cập thành công API bảo mật!", user: req.user });
+});
+
+// 2. API chặn người dùng sai quyền (ví dụ chỉ Admin mới được truy cập)
+// Mảng truyền vào là danh sách các quyền được phép. Giả sử cột quyền của bạn lưu là "Admin", "QuanTri", hoặc "1"
+app.get("/api/admin-only", verifyToken, verifyRole(["Admin", "QuanTri", "1"]), (req, res) => {
+  res.json({ success: true, message: "Chào mừng Admin! Bạn đã vượt qua kiểm tra quyền.", user: req.user });
 });
 
 app.listen(PORT, () => {
