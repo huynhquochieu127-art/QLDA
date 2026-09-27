@@ -5,43 +5,48 @@ import {
   Clock,
   User,
   LogOut,
-  DollarSign,
   Coffee,
   Users,
   Calendar,
-  CheckSquare,
-  ShoppingCart,
-  Bot,
   BarChart2,
-  FileText,
-  Download,
-  TestTube,
   Home as HomeIcon,
   Search,
-  Bell,
   Settings,
-  ShieldCheck,
   Package,
   CreditCard,
   Grid,
+  UserCheck,
+  Plus,
+  Trash2,
+  Edit,
+  Award,
+  Phone,
+  Star,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  PlusCircle,
+  MinusCircle,
+  Cake,
+  Gift,
+  Loader2,
+  Bot,
 } from "lucide-react";
 
 export default function Home() {
   const navigate = useNavigate();
 
-  // 1. LẤY THÔNG TIN VÀ CHUẨN HÓA ROLE TỪ STORAGE
+  // 1. THÔNG TIN NGƯỜI DÙNG & VAI TRÒ
   const userStr =
     sessionStorage.getItem("user") || localStorage.getItem("user");
   const user = userStr
     ? JSON.parse(userStr)
     : { name: "Nguyễn Hải Hậu", role: "Admin" };
-
-  // Chuẩn hóa role về dạng thường để so sánh (admin | manager/quanly | staff/nhanvien)
   const rawRole = (user.role || user.MaVaiTro || "staff")
     .toString()
     .toLowerCase();
 
-  let currentRole = "staff"; // Mặc định là nhân viên
+  let currentRole = "staff";
   if (rawRole.includes("admin") || rawRole === "1") {
     currentRole = "admin";
   } else if (
@@ -54,7 +59,6 @@ export default function Home() {
     currentRole = "staff";
   }
 
-  // Set tab mặc định: Nhân viên vào thẳng màn hình Bán hàng (POS), Admin/Quản lý vào Dashboard
   const [activeTab, setActiveTab] = useState(
     currentRole === "staff" ? "pos" : "dashboard",
   );
@@ -71,7 +75,155 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
-  // 2. ĐỊNH NGHĨA DANH SÁCH MENU THEO QUYỀN
+  // 2. QUẢN LÝ DỮ LIỆU MYSQL KHÁCH HÀNG
+  const [customers, setCustomers] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  // Modal Controls
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(null);
+  const [pointsModalCustomer, setPointsModalCustomer] = useState(null);
+
+  // Form State
+  const [customerForm, setCustomerForm] = useState({
+    name: "",
+    phone: "",
+    dob: "",
+    email: "",
+  });
+  const [pointDelta, setPointDelta] = useState("");
+
+  // Phân trang
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 5;
+
+  const API_URL = "http://localhost:5000/api/customers";
+
+  // Gọi API lấy dữ liệu từ MySQL
+  const fetchCustomersFromMySQL = async (searchQuery = "", page = 1) => {
+    setLoading(true);
+    setErrorMessage("");
+    try {
+      const response = await fetch(
+        `${API_URL}?search=${encodeURIComponent(searchQuery)}&page=${page}&limit=${itemsPerPage}`,
+      );
+
+      if (!response.ok) {
+        throw new Error("Không thể kết nối đến máy chủ MySQL!");
+      }
+
+      const result = await response.json();
+      setCustomers(result.data || []);
+      setTotalPages(result.totalPages || 1);
+    } catch (err) {
+      console.error("Lỗi kết nối API:", err);
+      setErrorMessage(err.message || "Lỗi tải dữ liệu khách hàng từ MySQL.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Debounce tìm kiếm SĐT (giúp tránh spam query xuống MySQL)
+  useEffect(() => {
+    if (activeTab === "customers") {
+      const timer = setTimeout(() => {
+        fetchCustomersFromMySQL(customerSearch, currentPage);
+      }, 300);
+
+      return () => clearTimeout(timer);
+    }
+  }, [customerSearch, currentPage, activeTab]);
+
+  // Kiểm tra sinh nhật hôm nay
+  const isBirthdayToday = (dobString) => {
+    if (!dobString) return false;
+    const today = new Date();
+    const dob = new Date(dobString);
+    return (
+      today.getDate() === dob.getDate() && today.getMonth() === dob.getMonth()
+    );
+  };
+
+  // Xử lý Thêm / Sửa khách hàng vào MySQL
+  const handleSaveCustomer = async (e) => {
+    e.preventDefault();
+
+    try {
+      const response = await fetch("http://localhost:5000/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(customerForm),
+      });
+
+      // Kiểm tra xem phản hồi có đúng dạng JSON không
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error(
+          "Server Backend chưa bật hoặc đường dẫn API bị sai (Server trả về HTML)!",
+        );
+      }
+
+      const resData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(resData.message || "Thao tác thất bại!");
+      }
+
+      alert("Thêm thành công!");
+      setShowAddModal(false);
+      fetchCustomersFromMySQL();
+    } catch (err) {
+      alert(`Lỗi: ${err.message}`);
+    }
+  };
+  // Xóa khách hàng khỏi MySQL
+  const handleDeleteCustomer = async (id) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa khách hàng này khỏi MySQL?"))
+      return;
+
+    try {
+      const response = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Xóa thất bại!");
+
+      alert("Xóa thành công!");
+      fetchCustomersFromMySQL(customerSearch, currentPage);
+    } catch (err) {
+      alert(`Lỗi: ${err.message}`);
+    }
+  };
+
+  // Tích / Trừ điểm trên MySQL
+  const handleUpdatePoints = async (action) => {
+    const amount = parseInt(pointDelta, 10);
+    if (isNaN(amount) || amount <= 0) {
+      alert("Nhập số điểm hợp lệ lớn hơn 0!");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${API_URL}/${pointsModalCustomer.id}/points`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, points: amount }),
+        },
+      );
+
+      if (!response.ok) throw new Error("Lỗi cập nhật điểm!");
+
+      setPointsModalCustomer(null);
+      setPointDelta("");
+      fetchCustomersFromMySQL(customerSearch, currentPage);
+    } catch (err) {
+      alert(`Lỗi: ${err.message}`);
+    }
+  };
+
+  // Danh mục Menu
   const menuList = [
     {
       id: "dashboard",
@@ -79,7 +231,6 @@ export default function Home() {
       icon: <HomeIcon size={18} />,
       roles: ["admin", "manager"],
     },
-    // Chức năng dành riêng cho Nhân viên (POS)
     {
       id: "pos",
       label: "Tạo đơn & Thanh toán (POS)",
@@ -92,7 +243,12 @@ export default function Home() {
       icon: <Grid size={18} />,
       roles: ["staff", "admin", "manager"],
     },
-    // Chức năng Quản lý & Admin
+    {
+      id: "customers",
+      label: "Quản lý khách hàng",
+      icon: <UserCheck size={18} />,
+      roles: ["staff", "admin", "manager"],
+    },
     {
       id: "inventory",
       label: "Quản lý kho & Đồ uống",
@@ -111,7 +267,6 @@ export default function Home() {
       icon: <BarChart2 size={18} />,
       roles: ["manager", "admin"],
     },
-    // Chức năng nâng cao dành riêng cho Admin
     {
       id: "hr",
       label: "Quản lý nhân sự & Phân quyền",
@@ -132,21 +287,13 @@ export default function Home() {
     },
   ];
 
-  // Lọc ra các menu mà Role hiện tại được phép xem
   const allowedMenus = menuList.filter((item) =>
     item.roles.includes(currentRole),
   );
 
-  // Xử lý Đăng xuất
-  const handleLogout = () => {
-    sessionStorage.clear();
-    localStorage.clear();
-    navigate("/login");
-  };
-
   return (
     <div className="home-container">
-      {/* ================= SIDEBAR ================= */}
+      {/* SIDEBAR */}
       <aside className="sidebar">
         <div className="sidebar-header">
           <Coffee className="brand-icon" size={28} />
@@ -155,7 +302,7 @@ export default function Home() {
 
         <nav className="sidebar-nav">
           <div className="nav-group-title">
-            CHỨC NĂNG ({currentRole.toUpperCase()})
+            QUẢN LÝ ({currentRole.toUpperCase()})
           </div>
 
           {allowedMenus.map((item) => (
@@ -171,19 +318,18 @@ export default function Home() {
         </nav>
 
         <div className="sidebar-footer">
-          <button className="logout-btn" onClick={handleLogout}>
+          <button className="logout-btn" onClick={() => navigate("/login")}>
             <LogOut size={18} /> <span>Đăng xuất</span>
           </button>
         </div>
       </aside>
 
-      {/* ================= MAIN CONTENT ================= */}
+      {/* MAIN CONTENT */}
       <main className="main-content">
-        {/* Header trên cùng */}
         <header className="main-header">
           <div className="search-bar">
             <Search size={18} />
-            <input type="text" placeholder="Tìm kiếm nhanh..." />
+            <input type="text" placeholder="Tìm kiếm hệ thống..." />
           </div>
 
           <div className="header-right">
@@ -195,87 +341,368 @@ export default function Home() {
             <div className="user-profile">
               <User size={20} />
               <div className="user-info">
-                <span className="user-name">
-                  {user.name || user.TenNguoiDung || "Người dùng"}
-                </span>
+                <span className="user-name">{user.name || "Người dùng"}</span>
                 <span className="user-role-badge">
-                  {currentRole === "admin" && "👑 Admin (Toàn quyền)"}
-                  {currentRole === "manager" && "💼 Quản lý"}
-                  {currentRole === "staff" && "☕ Nhân viên (POS)"}
+                  {currentRole.toUpperCase()}
                 </span>
               </div>
             </div>
           </div>
         </header>
 
-        {/* ================= NỘI DUNG THEO ROLE ================= */}
         <div className="content-body">
-          {/* 1. MÀN HÌNH BÁN HÀNG FOR STAFF */}
-          {activeTab === "pos" && (
-            <div className="pos-view">
-              <h2>Màn hình Bán hàng & Thanh toán (POS)</h2>
-              <p>
-                Chức năng tạo đơn hàng, gọi món và xuất hóa đơn cho nhân viên.
-              </p>
-              {/* Thêm Component Order / Cart tại đây */}
-            </div>
-          )}
-
-          {/* 2. MÀN HÌNH DASHBOARD FOR ADMIN & MANAGER */}
-          {activeTab === "dashboard" && (
-            <div className="dashboard-view">
-              <div className="view-header">
-                <h1>Tổng quan hệ thống</h1>
-                <p>
-                  Bảng điều khiển dành cho{" "}
-                  {currentRole === "admin" ? "Admin" : "Quản lý"}
-                </p>
+          {activeTab === "customers" && (
+            <div className="customers-view">
+              <div className="page-header">
+                <div>
+                  <h2 className="page-title">
+                    Quản lý Khách Hàng (MySQL Database)
+                  </h2>
+                  <p className="page-subtitle">
+                    Dữ liệu được lưu trữ trực tiếp trên MySQL - Tra cứu SĐT cực
+                    nhanh
+                  </p>
+                </div>
+                <button
+                  className="btn-add-customer"
+                  onClick={() => {
+                    setEditingCustomer(null);
+                    setCustomerForm({
+                      name: "",
+                      phone: "",
+                      dob: "",
+                      email: "",
+                    });
+                    setShowAddModal(true);
+                  }}
+                >
+                  <Plus size={18} /> Thêm khách hàng MySQL
+                </button>
               </div>
 
-              {/* Thống kê doanh thu */}
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <div className="stat-icon revenue">
-                    <DollarSign />
-                  </div>
-                  <div className="stat-info">
-                    <span>Doanh thu hôm nay</span>
-                    <h3>code</h3>
-                  </div>
+              {/* BỘ TÌM KIẾM SĐT */}
+              <div className="search-container">
+                <div className="search-input-wrapper">
+                  <Search size={18} className="search-icon" />
+                  <input
+                    type="text"
+                    placeholder="Nhập SĐT hoặc Tên cần tra cứu từ MySQL..."
+                    value={customerSearch}
+                    onChange={(e) => {
+                      setCustomerSearch(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="customer-search-input"
+                  />
+                  {loading && <Loader2 size={18} className="spinner-icon" />}
                 </div>
+              </div>
 
-                <div className="stat-card">
-                  <div className="stat-icon orders">
-                    <ShoppingCart />
-                  </div>
-                  <div className="stat-info">
-                    <span>Tổng đơn hàng</span>
-                    <h3>code</h3>
-                  </div>
-                </div>
+              {errorMessage && (
+                <div className="error-banner">{errorMessage}</div>
+              )}
 
-                {currentRole === "admin" && (
-                  <div className="stat-card">
-                    <div className="stat-icon staff">
-                      <Users />
-                    </div>
-                    <div className="stat-info">
-                      <span>Nhân sự quản lý</span>
-                      <h3>code</h3>
+              {/* BẢNG DỮ LIỆU MYSQL */}
+              <div className="table-card">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Tên khách hàng</th>
+                      <th>Số điện thoại</th>
+                      <th>Ngày sinh</th>
+                      <th>Hạng thẻ</th>
+                      <th>Điểm tích lũy</th>
+                      <th>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr>
+                        <td colSpan="7" className="loading-cell">
+                          <Loader2 size={24} className="spinner" />
+                          <span>Đang truy vấn dữ liệu từ MySQL...</span>
+                        </td>
+                      </tr>
+                    ) : customers.length > 0 ? (
+                      customers.map((item) => {
+                        const isBday = isBirthdayToday(item.dob);
+                        return (
+                          <tr
+                            key={item.id}
+                            className={isBday ? "row-birthday" : ""}
+                          >
+                            <td>
+                              <strong>#{item.id}</strong>
+                            </td>
+                            <td>
+                              <div className="customer-name-wrapper">
+                                <span>{item.name}</span>
+                                {isBday && (
+                                  <span className="birthday-tag">
+                                    <Gift size={12} /> Sinh nhật
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <span className="cell-flex phone-highlight">
+                                <Phone size={14} className="icon-muted" />
+                                <strong>{item.phone}</strong>
+                              </span>
+                            </td>
+                            <td>
+                              <span className="cell-flex">
+                                <Cake size={14} className="icon-muted" />
+                                {item.dob
+                                  ? new Date(item.dob).toLocaleDateString(
+                                      "vi-VN",
+                                    )
+                                  : "Chưa nhập"}
+                              </span>
+                            </td>
+                            <td>
+                              <span
+                                className={`rank-badge rank-${(item.rank || "Đồng").toLowerCase()}`}
+                              >
+                                <Star size={12} className="inline-star" />
+                                {item.rank || "Đồng"}
+                              </span>
+                            </td>
+                            <td className="points-cell">
+                              {item.points || 0} pts
+                            </td>
+                            <td>
+                              <div className="action-buttons">
+                                <button
+                                  title="Tích/Trừ điểm"
+                                  onClick={() => setPointsModalCustomer(item)}
+                                  className="action-btn btn-award"
+                                >
+                                  <Award size={16} />
+                                </button>
+                                <button
+                                  title="Chỉnh sửa"
+                                  onClick={() => {
+                                    setEditingCustomer(item);
+                                    setCustomerForm({
+                                      name: item.name || "",
+                                      phone: item.phone || "",
+                                      dob: item.dob || "",
+                                      email: item.email || "",
+                                    });
+                                    setShowAddModal(true);
+                                  }}
+                                  className="action-btn btn-edit"
+                                >
+                                  <Edit size={16} />
+                                </button>
+                                {(currentRole === "admin" ||
+                                  currentRole === "manager") && (
+                                  <button
+                                    title="Xóa khỏi MySQL"
+                                    onClick={() =>
+                                      handleDeleteCustomer(item.id)
+                                    }
+                                    className="action-btn btn-delete"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan="7" className="empty-table-cell">
+                          Không tìm thấy khách hàng nào trong database MySQL!
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                {/* THANH PHÂN TRANG */}
+                {totalPages > 1 && (
+                  <div className="pagination-bar">
+                    <span className="pagination-info">
+                      Trang {currentPage} / {totalPages}
+                    </span>
+                    <div className="pagination-buttons">
+                      <button
+                        disabled={currentPage === 1}
+                        onClick={() =>
+                          setCurrentPage((prev) => Math.max(prev - 1, 1))
+                        }
+                        className="page-btn"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <button
+                        disabled={currentPage === totalPages}
+                        onClick={() =>
+                          setCurrentPage((prev) =>
+                            Math.min(prev + 1, totalPages),
+                          )
+                        }
+                        className="page-btn"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
                     </div>
                   </div>
                 )}
               </div>
+
+              {/* MODAL THÊM / SỬA */}
+              {showAddModal && (
+                <div className="modal-overlay">
+                  <div className="modal-container">
+                    <div className="modal-header">
+                      <h3>
+                        {editingCustomer
+                          ? "Chỉnh sửa (MySQL)"
+                          : "Thêm mới vào MySQL"}
+                      </h3>
+                      <button
+                        onClick={() => setShowAddModal(false)}
+                        className="btn-close-modal"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                    <form onSubmit={handleSaveCustomer}>
+                      <div className="form-group">
+                        <label>Tên khách hàng (*)</label>
+                        <input
+                          type="text"
+                          value={customerForm.name}
+                          onChange={(e) =>
+                            setCustomerForm({
+                              ...customerForm,
+                              name: e.target.value,
+                            })
+                          }
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>
+                          Số điện thoại (*){" "}
+                          <small className="text-muted">
+                            (Duy nhất trong MySQL)
+                          </small>
+                        </label>
+                        <input
+                          type="tel"
+                          value={customerForm.phone}
+                          onChange={(e) =>
+                            setCustomerForm({
+                              ...customerForm,
+                              phone: e.target.value,
+                            })
+                          }
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Ngày sinh</label>
+                        <input
+                          type="date"
+                          value={customerForm.dob}
+                          onChange={(e) =>
+                            setCustomerForm({
+                              ...customerForm,
+                              dob: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Email</label>
+                        <input
+                          type="email"
+                          value={customerForm.email}
+                          onChange={(e) =>
+                            setCustomerForm({
+                              ...customerForm,
+                              email: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="modal-actions">
+                        <button
+                          type="button"
+                          onClick={() => setShowAddModal(false)}
+                          className="btn-cancel"
+                        >
+                          Hủy
+                        </button>
+                        <button type="submit" className="btn-save">
+                          {editingCustomer ? "Cập nhật MySQL" : "Lưu vào MySQL"}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* MODAL TÍCH ĐIỂM */}
+              {pointsModalCustomer && (
+                <div className="modal-overlay">
+                  <div className="modal-container modal-small">
+                    <div className="modal-header">
+                      <h3>Cập nhật điểm trong MySQL</h3>
+                      <button
+                        onClick={() => setPointsModalCustomer(null)}
+                        className="btn-close-modal"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                    <p className="points-modal-desc">
+                      Khách hàng: <strong>{pointsModalCustomer.name}</strong> (
+                      {pointsModalCustomer.points || 0} pts)
+                    </p>
+                    <div className="form-group">
+                      <label>Số điểm điều chỉnh</label>
+                      <input
+                        type="number"
+                        placeholder="Nhập số điểm..."
+                        value={pointDelta}
+                        onChange={(e) => setPointDelta(e.target.value)}
+                      />
+                    </div>
+                    <div className="points-action-grid">
+                      <button
+                        onClick={() => handleUpdatePoints("add")}
+                        className="btn-points-add"
+                      >
+                        <PlusCircle size={16} /> Cộng điểm
+                      </button>
+                      <button
+                        onClick={() => handleUpdatePoints("subtract")}
+                        className="btn-points-subtract"
+                      >
+                        <MinusCircle size={16} /> Trừ điểm
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* 3. CÁC TẠM THỜI CHO TAB KHÁC */}
-          {!["pos", "dashboard"].includes(activeTab) && (
+          {activeTab !== "customers" && (
             <div className="tab-placeholder">
-              <h2>Mô-đun: {activeTab.toUpperCase()}</h2>
-              <p>
-                Bạn đang truy cập với quyền: <strong>{currentRole}</strong>
-              </p>
+              <Coffee size={28} className="placeholder-icon" />
+              <h2>
+                Phân hệ: {menuList.find((m) => m.id === activeTab)?.label}
+              </h2>
+              <p>Sẵn sàng kết nối MySQL cho phân hệ này.</p>
             </div>
           )}
         </div>
