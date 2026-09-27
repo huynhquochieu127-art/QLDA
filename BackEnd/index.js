@@ -1,11 +1,28 @@
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
+const http = require("http");           // Cần để Socket.IO gắn vào
+const { Server } = require("socket.io"); // Socket.IO
 const cors = require("cors");
 const mysql = require("mysql2/promise");
 const jwt = require("jsonwebtoken");
 
 const app = express();
+const httpServer = http.createServer(app); // Tạo HTTP Server từ Express
+
+// ── Cấu hình Socket.IO ────────────────────────────────────────────────────────
+const io = new Server(httpServer, {
+  cors: { origin: "*", methods: ["GET", "POST", "PUT", "DELETE"] },
+});
+
+io.on("connection", (socket) => {
+  console.log(`🔌 Client kết nối: ${socket.id}`);
+  socket.on("disconnect", () => {
+    console.log(`❌ Client ngắt kết nối: ${socket.id}`);
+  });
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 app.use(cors());
 app.use(express.json());
 
@@ -13,12 +30,11 @@ app.use(express.json());
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_key";
 
 // Kết nối MySQL Database
-console.log("DB_PASSWORD from env is:", process.env.DB_PASSWORD);
 const db = mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "12345", // Dự phòng mật khẩu
-  database: process.env.DB_NAME || "dacnpm", // CSDL dacnpm
+  password: process.env.DB_PASSWORD || "12345", // Hardcode 12345 để dự phòng nếu .env lỗi
+  database: process.env.DB_NAME || "dacnpm", // Hardcode dacnpm để dự phòng
   waitForConnections: true,
   connectionLimit: 10,
 });
@@ -547,10 +563,7 @@ app.delete("/api/products/:id", async (req, res) => {
   }
 });
 
-// ==========================================
-// THIẾT LẬP PORT & CHẠY SERVER
-// ==========================================
-const PORT = process.env.PORT || 5000;
+const PORT = 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server BackEnd đang chạy tại: http://localhost:${PORT}`);
 });

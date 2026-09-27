@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import "../../css/tables.css";
+import { useTableSocket } from "../hooks/useTableSocket";
 import {
   Grid,
   Plus,
@@ -134,6 +135,82 @@ export default function TableManagement({ currentRole = "admin", onSelectTableFo
     const saved = localStorage.getItem("cf_tables");
     return saved ? JSON.parse(saved) : DEFAULT_TABLES;
   });
+
+  // ── Load bàn từ API lần đầu (đồng bộ với Database) ─────────────────────────
+  useEffect(() => {
+    fetch("http://localhost:5000/api/tables")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          // Chuyển format DB -> format frontend
+          const mapped = data.map((b) => ({
+            id: b.MaBan,
+            name: b.TenBan,
+            areaId: "area-" + b.MaKhuVuc,
+            capacity: b.SoChoNgoi || 4,
+            status:
+              b.TrangThai === "CO_KHACH"
+                ? "occupied"
+                : b.TrangThai === "DAT_TRUOC"
+                ? "reserved"
+                : "empty",
+            checkInTime: null,
+            totalAmount: 0,
+            itemCount: 0,
+          }));
+          setTables(mapped);
+        }
+      })
+      .catch(() => {}); // Giữ localStorage nếu API lỗi
+  }, []);
+
+  // ── Socket.IO: Lắng nghe realtime từ Backend ─────────────────────────────
+  const handleStatusChanged = useCallback((data) => {
+    setTables((prev) =>
+      prev.map((t) =>
+        t.id === data.maBan
+          ? {
+              ...t,
+              status:
+                data.trangThai === "CO_KHACH"
+                  ? "occupied"
+                  : data.trangThai === "DAT_TRUOC"
+                  ? "reserved"
+                  : "empty",
+            }
+          : t
+      )
+    );
+    console.log(`🔴 Realtime: ${data.tenBan} -> ${data.trangThai}`);
+  }, []);
+
+  const handleTableAdded = useCallback((data) => {
+    setTables((prev) => [
+      ...prev,
+      {
+        id: data.maBan,
+        name: data.tenBan,
+        areaId: "area-1",
+        capacity: 4,
+        status: "empty",
+        checkInTime: null,
+        totalAmount: 0,
+        itemCount: 0,
+      },
+    ]);
+  }, []);
+
+  const handleTableDeleted = useCallback((data) => {
+    setTables((prev) => prev.filter((t) => t.id !== data.maBan));
+  }, []);
+
+  // Kích hoạt socket listeners
+  useTableSocket({
+    onStatusChanged: handleStatusChanged,
+    onTableAdded: handleTableAdded,
+    onTableDeleted: handleTableDeleted,
+  });
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Chế độ xem: 'pos' (Sơ đồ lưới trực quan) | 'admin' (Quản lý thiết lập Khu vực & Bàn)
   const [activeView, setActiveView] = useState("pos");
