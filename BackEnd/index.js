@@ -276,6 +276,106 @@ app.delete("/api/categories/:id", async (req, res) => {
   }
 });
 
+// ==========================================
+// 4. API SẢN PHẨM / ĐỒ UỐNG (PRODUCTS)
+// ==========================================
+
+// [GET] Lấy danh sách đồ uống (có thể lọc theo danh mục)
+app.get("/api/products", async (req, res) => {
+  try {
+    const { maDanhMuc } = req.query;
+    let sql = `
+      SELECT 
+        sp.MaSanPham, sp.TenSanPham, sp.Gia, sp.MoTa, sp.CoBan,
+        sp.MaDanhMuc, dm.TenDanhMuc
+      FROM sanpham sp
+      LEFT JOIN danhmuc dm ON sp.MaDanhMuc = dm.MaDanhMuc
+    `;
+    const params = [];
+    if (maDanhMuc) {
+      sql += " WHERE sp.MaDanhMuc = ?";
+      params.push(maDanhMuc);
+    }
+    sql += " ORDER BY sp.MaSanPham DESC";
+    const [rows] = await db.query(sql, params);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [GET] Lấy chi tiết 1 sản phẩm theo ID
+app.get("/api/products/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [rows] = await db.query(
+      `SELECT sp.*, dm.TenDanhMuc 
+       FROM sanpham sp 
+       LEFT JOIN danhmuc dm ON sp.MaDanhMuc = dm.MaDanhMuc
+       WHERE sp.MaSanPham = ?`,
+      [id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy sản phẩm!" });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [POST] Thêm mới sản phẩm/đồ uống
+app.post("/api/products", async (req, res) => {
+  try {
+    const { tenSanPham, gia, moTa, coBan, maDanhMuc } = req.body;
+    if (!tenSanPham || gia === undefined) {
+      return res.status(400).json({ message: "Vui lòng nhập Tên và Giá sản phẩm!" });
+    }
+    const [result] = await db.query(
+      "INSERT INTO sanpham (TenSanPham, Gia, MoTa, CoBan, MaDanhMuc) VALUES (?, ?, ?, ?, ?)",
+      [tenSanPham, gia, moTa || null, coBan ? 1 : 0, maDanhMuc || null]
+    );
+    res.status(201).json({ message: "Thêm sản phẩm thành công!", id: result.insertId });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [PUT] Cập nhật sản phẩm/đồ uống
+app.put("/api/products/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tenSanPham, gia, moTa, coBan, maDanhMuc } = req.body;
+    if (!tenSanPham || gia === undefined) {
+      return res.status(400).json({ message: "Vui lòng nhập Tên và Giá sản phẩm!" });
+    }
+    const [result] = await db.query(
+      "UPDATE sanpham SET TenSanPham = ?, Gia = ?, MoTa = ?, CoBan = ?, MaDanhMuc = ? WHERE MaSanPham = ?",
+      [tenSanPham, gia, moTa || null, coBan ? 1 : 0, maDanhMuc || null, id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Không tìm thấy sản phẩm!" });
+    }
+    res.json({ message: "Cập nhật sản phẩm thành công!" });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [DELETE] Xóa sản phẩm
+app.delete("/api/products/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await db.query("DELETE FROM sanpham WHERE MaSanPham = ?", [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Không tìm thấy sản phẩm để xóa!" });
+    }
+    res.json({ message: "Xóa sản phẩm thành công!" });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
 const PORT = 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server BackEnd đang chạy tại: http://localhost:${PORT}`);

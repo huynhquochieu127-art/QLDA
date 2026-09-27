@@ -4,6 +4,7 @@ import "../../css/home.css";
 import PosOrder from "../components/PosOrder";
 import TableManagement from "../components/TableManagement";
 import CategoryManagement from "../components/CategoryManagement";
+import ProductManagement from "../components/ProductManagement";
 import {
   Clock,
   User,
@@ -264,7 +265,7 @@ export default function Home() {
     },
     {
       id: "inventory",
-      label: "Quản lý kho & Đồ uống",
+      label: "Quản lý Đồ Uống & Thực Đơn",
       icon: <Package size={18} />,
       roles: ["manager", "admin"],
     },
@@ -386,6 +387,11 @@ export default function Home() {
           {/* TAB QUẢN LÝ DANH MỤC */}
           {activeTab === "categories" && (
             <CategoryManagement currentRole={currentRole} />
+          )}
+
+          {/* TAB QUẢN LÝ ĐỒ UỐNG & THỰC ĐƠN */}
+          {activeTab === "inventory" && (
+            <ProductManagement currentRole={currentRole} />
           )}
 
           {/* TAB 2: QUẢN LÝ KHÁCH HÀNG */}
@@ -738,6 +744,7 @@ export default function Home() {
           {activeTab !== "pos" &&
             activeTab !== "customers" &&
             activeTab !== "categories" &&
+            activeTab !== "inventory" &&
             activeTab !== "tables" && (
               <div className="tab-placeholder">
                 <Coffee size={28} className="placeholder-icon" />
