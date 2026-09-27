@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "../../css/home.css";
+import PosOrder from "../components/PosOrder";
 import {
   Clock,
   User,
@@ -179,6 +180,7 @@ export default function Home() {
       alert(`Lỗi: ${err.message}`);
     }
   };
+
   // Xóa khách hàng khỏi MySQL
   const handleDeleteCustomer = async (id) => {
     if (!window.confirm("Bạn có chắc chắn muốn xóa khách hàng này khỏi MySQL?"))
@@ -351,6 +353,10 @@ export default function Home() {
         </header>
 
         <div className="content-body">
+          {/* TAB 1: PHÂN HỆ TẠO ĐƠN & THANH TOÁN (POS) */}
+          {activeTab === "pos" && <PosOrder />}
+
+          {/* TAB 2: QUẢN LÝ KHÁCH HÀNG */}
           {activeTab === "customers" && (
             <div className="customers-view">
               <div className="page-header">
@@ -696,7 +702,8 @@ export default function Home() {
             </div>
           )}
 
-          {activeTab !== "customers" && (
+          {/* TAB PLACEHOLDER DÀNH CHO CÁC PHÂN HỆ KHÁC */}
+          {activeTab !== "pos" && activeTab !== "customers" && (
             <div className="tab-placeholder">
               <Coffee size={28} className="placeholder-icon" />
               <h2>
