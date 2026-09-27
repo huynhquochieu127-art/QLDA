@@ -73,6 +73,8 @@ const MOCK_CUSTOMERS = [
   { id: 101, phone: "0905123456", name: "Nguyễn Văn A", dob: "1995-05-20" },
   { id: 102, phone: "0914888999", name: "Trần Thị B", dob: "1998-11-12" },
   { id: 103, phone: "0987654321", name: "Lê Văn C", dob: "2000-01-01" },
+
+  //ket noi backend
 ];
 
 export default function PosOrder() {
