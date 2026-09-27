@@ -1,123 +1,187 @@
-require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const mysql = require("mysql2");
-const bcrypt = require("bcrypt"); // 1. Import bcrypt
-const jwt = require("jsonwebtoken");
-const { verifyToken, verifyRole } = require("./middleware/authMiddleware");
+const mysql = require("mysql2/promise");
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
-app.use(cors());
-app.use(express.json());
+// 1. Cấu hình Middleware
+app.use(cors()); // Cho phép React truy cập
+app.use(express.json()); // Đọc dữ liệu JSON từ request body
 
-// Cấu hình kết nối MySQL Pool
+// 2. Kết nối Database MySQL của bạn
 const db = mysql.createPool({
-  host: process.env.DB_HOST || "localhost",
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME || "dacnpm",
+  host: "localhost",
+  user: "root",
+  password: "12345", // Nhập mật khẩu MySQL của bạn nếu có
+  database: "dacnpm", // Thay bằng tên Database thực tế của bạn
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
 });
 
-db.getConnection((err, connection) => {
-  if (err) {
-    console.error("❌ Lỗi kết nối MySQL:", err.message);
-  } else {
-    console.log("✅ Đã kết nối MySQL thành công!");
-    connection.release();
-  }
-});
+// Hàm hỗ trợ tự động tính Hạng thẻ dựa theo DiemTichLuy
+const getRank = (points) => {
+  if (points >= 500) return "Kim Cương";
+  if (points >= 200) return "Vàng";
+  if (points >= 50) return "Bạc";
+  return "Đồng";
+};
 
-// API xử lý đăng nhập
-app.post("/api/login", (req, res) => {
-  const { email, password } = req.body;
+// -------------------------------------------------------------
+// CÁC API KHÁCH HÀNG (DÙNG BẢNG `khachhang`)
+// -------------------------------------------------------------
 
-  if (!email || !password) {
-    return res.status(400).json({
-      success: false,
-      message: "Vui lòng nhập đầy đủ Email và Mật khẩu!",
+// [GET] Lấy danh sách khách hàng + Tìm kiếm SĐT / Tên + Phân trang
+app.get("/api/customers", async (req, res) => {
+  try {
+    const search = req.query.search || "";
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 5;
+    const offset = (page - 1) * limit;
+
+    const searchParam = `%${search}%`;
+
+    // 1. Đếm tổng số bản ghi
+    const [countResult] = await db.query(
+      "SELECT COUNT(*) as total FROM khachhang WHERE SoDienThoai LIKE ? OR HoTen LIKE ?",
+      [searchParam, searchParam],
+    );
+    const totalItems = countResult[0].total;
+
+    // 2. Lấy dữ liệu và map về các tên thuộc tính tiếng Anh cho React dễ dùng
+    const [rows] = await db.query(
+      `SELECT 
+        MaKhachHang AS id, 
+        HoTen AS name, 
+        SoDienThoai AS phone, 
+        DATE_FORMAT(NgaySinh, '%Y-%m-%d') AS dob, 
+        Email AS email, 
+        DiemTichLuy AS points 
+       FROM khachhang 
+       WHERE SoDienThoai LIKE ? OR HoTen LIKE ? 
+       ORDER BY MaKhachHang DESC 
+       LIMIT ? OFFSET ?`,
+      [searchParam, searchParam, limit, offset],
+    );
+
+    // Tính toán hạng thẻ tự động cho từng khách hàng
+    const formattedData = rows.map((item) => ({
+      ...item,
+      rank: getRank(item.points || 0),
+    }));
+
+    res.json({
+      data: formattedData,
+      totalPages: Math.ceil(totalItems / limit) || 1,
+      currentPage: page,
     });
+  } catch (err) {
+    console.error("Lỗi MySQL GET:", err);
+    res
+      .status(500)
+      .json({ message: "Lỗi truy vấn Database MySQL: " + err.message });
   }
-
-  // 2. Chỉ truy vấn theo Email
-  const sql = "SELECT * FROM taikhoan WHERE Email = ?";
-
-  db.query(sql, [email], async (err, results) => {
-    if (err) {
-      console.error("Lỗi truy vấn MySQL:", err.message);
-      return res.status(500).json({
-        success: false,
-        message: "Lỗi máy chủ nội bộ!",
-      });
-    }
-
-    if (results.length === 0) {
-      return res.status(401).json({
-        success: false,
-        message: "Email hoặc mật khẩu không đúng!",
-      });
-    }
-
-    const user = results[0];
-
-    try {
-      // 3. Kiểm tra xem mật khẩu trong DB có dạng hash bcrypt ($2b$) hay chuỗi thường
-      let isMatch = false;
-      
-      if (user.MatKhau && user.MatKhau.startsWith("$2b$")) {
-        // So sánh bằng bcrypt nếu mật khẩu đã mã hóa
-        isMatch = await bcrypt.compare(password, user.MatKhau);
-      } else {
-        // So sánh trực tiếp nếu mật khẩu trong DB là chuỗi thường (ví dụ: '123456')
-        isMatch = (password === user.MatKhau);
-      }
-
-      if (isMatch) {
-        delete user.MatKhau; // Ẩn mật khẩu trước khi gửi về client 1
-
-        // Tạo JWT Token
-        const accessToken = jwt.sign(
-          { ...user },
-          process.env.JWT_SECRET || "fallback_secret_key",
-          { expiresIn: "1d" } // Token hết hạn sau 1 ngày
-        );
-
-        return res.json({
-          success: true,
-          message: "Đăng nhập thành công!",
-          user: user,
-          accessToken: accessToken,
-        });
-      } else {
-        return res.status(401).json({
-          success: false,
-          message: "Email hoặc mật khẩu không đúng!",
-        });
-      }
-    } catch (error) {
-      console.error("Lỗi xác thực mật khẩu:", error);
-      return res.status(500).json({ success: false, message: "Lỗi xử lý mật khẩu!" });
-    }
-  });
 });
 
-// --- CÁC API CẦN BẢO VỆ (SỬ DỤNG MIDDLEWARE) ---
+// [POST] Thêm mới khách hàng
+app.post("/api/customers", async (req, res) => {
+  try {
+    const { name, phone, dob, email } = req.body;
 
-// 1. API yêu cầu đăng nhập (có token hợp lệ)
-app.get("/api/protected", verifyToken, (req, res) => {
-  res.json({ success: true, message: "Truy cập thành công API bảo mật!", user: req.user });
+    if (!name || !phone) {
+      return res
+        .status(400)
+        .json({ message: "Tên và Số điện thoại là bắt buộc!" });
+    }
+
+    const [result] = await db.query(
+      "INSERT INTO khachhang (HoTen, SoDienThoai, NgaySinh, Email) VALUES (?, ?, ?, ?)",
+      [name, phone, dob || null, email || null],
+    );
+
+    res.status(201).json({
+      message: "Thêm khách hàng thành công!",
+      id: result.insertId,
+    });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY" || err.errno === 1062) {
+      return res
+        .status(400)
+        .json({ message: "Số điện thoại này đã tồn tại trong hệ thống!" });
+    }
+    console.error("Lỗi MySQL POST:", err);
+    res
+      .status(500)
+      .json({ message: "Không thể thêm khách hàng: " + err.message });
+  }
 });
 
-// 2. API chặn người dùng sai quyền (ví dụ chỉ Admin mới được truy cập)
-// Mảng truyền vào là danh sách các quyền được phép. Giả sử cột quyền của bạn lưu là "Admin", "QuanTri", hoặc "1"
-app.get("/api/admin-only", verifyToken, verifyRole(["Admin", "QuanTri", "1"]), (req, res) => {
-  res.json({ success: true, message: "Chào mừng Admin! Bạn đã vượt qua kiểm tra quyền.", user: req.user });
+// [PUT] Cập nhật thông tin khách hàng
+app.put("/api/customers/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, phone, dob, email } = req.body;
+
+    await db.query(
+      "UPDATE khachhang SET HoTen = ?, SoDienThoai = ?, NgaySinh = ?, Email = ? WHERE MaKhachHang = ?",
+      [name, phone, dob || null, email || null, id],
+    );
+
+    res.json({ message: "Cập nhật khách hàng thành công!" });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY" || err.errno === 1062) {
+      return res
+        .status(400)
+        .json({ message: "Số điện thoại này đã bị trùng!" });
+    }
+    res.status(500).json({ message: "Lỗi cập nhật: " + err.message });
+  }
 });
 
+// [PATCH] Cộng / Trừ điểm tích lũy
+app.patch("/api/customers/:id/points", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, points } = req.body;
+
+    // Lấy điểm hiện tại
+    const [rows] = await db.query(
+      "SELECT DiemTichLuy FROM khachhang WHERE MaKhachHang = ?",
+      [id],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy khách hàng!" });
+    }
+
+    let currentPoints = rows[0].DiemTichLuy || 0;
+    let newPoints =
+      action === "add" ? currentPoints + points : currentPoints - points;
+    if (newPoints < 0) newPoints = 0;
+
+    await db.query(
+      "UPDATE khachhang SET DiemTichLuy = ? WHERE MaKhachHang = ?",
+      [newPoints, id],
+    );
+
+    res.json({ message: "Cập nhật điểm thành công!", newPoints });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi điểm tích lũy: " + err.message });
+  }
+});
+
+// [DELETE] Xóa khách hàng
+app.delete("/api/customers/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.query("DELETE FROM khachhang WHERE MaKhachHang = ?", [id]);
+    res.json({ message: "Xóa thành công!" });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi khi xóa: " + err.message });
+  }
+});
+
+// Chạy Server
+const PORT = 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server BackEnd đang chạy tại: http://localhost:${PORT}`);
 });
