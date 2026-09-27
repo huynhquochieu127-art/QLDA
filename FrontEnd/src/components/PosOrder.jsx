@@ -77,10 +77,31 @@ const MOCK_CUSTOMERS = [
   //ket noi backend
 ];
 
-export default function PosOrder() {
+export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
   const [activeCategory, setActiveCategory] = useState("all");
   const [cart, setCart] = useState([]);
-  const [selectedTable, setSelectedTable] = useState("Bàn 01");
+  const [selectedTable, setSelectedTable] = useState(selectedTableProp || "Bàn 01");
+
+  // Đồng bộ bàn khi chọn từ Sơ đồ bàn (QH-71)
+  useEffect(() => {
+    if (selectedTableProp) {
+      setSelectedTable(selectedTableProp);
+    }
+  }, [selectedTableProp]);
+
+  // Đọc danh sách bàn cấu hình từ Admin (localStorage)
+  const [tableOptions, setTableOptions] = useState(() => {
+    try {
+      const saved = localStorage.getItem("cf_tables");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((t) => t.name);
+        }
+      }
+    } catch (e) {}
+    return ["Bàn 01", "Bàn 02", "Bàn 03", "Bàn 04", "Bàn 05"];
+  });
 
   // State Khách hàng
   const [phoneSearch, setPhoneSearch] = useState("");
@@ -359,17 +380,40 @@ export default function PosOrder() {
       <div className="pos-sidebar">
         <div className="sidebar-header">
           <h2>Đơn Hàng</h2>
-          <select
-            value={selectedTable}
-            onChange={(e) => setSelectedTable(e.target.value)}
-            className="table-select"
-          >
-            <option value="Mang về">Mang về</option>
-            <option value="Bàn 01">Bàn 01</option>
-            <option value="Bàn 02">Bàn 02</option>
-            <option value="Bàn 03">Bàn 03</option>
-            <option value="Bàn 04">Bàn 04</option>
-          </select>
+          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+            <select
+              value={selectedTable}
+              onChange={(e) => setSelectedTable(e.target.value)}
+              className="table-select"
+            >
+              <option value="Mang về">Mang về</option>
+              {tableOptions.map((tblName) => (
+                <option key={tblName} value={tblName}>
+                  {tblName}
+                </option>
+              ))}
+            </select>
+            {onNavigateToTables && (
+              <button
+                type="button"
+                onClick={onNavigateToTables}
+                title="Mở Sơ đồ bàn trực quan dạng lưới (Grid) Xanh - Đỏ - Vàng"
+                style={{
+                  padding: "5px 9px",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  borderRadius: "6px",
+                  border: "1px solid #b8c8d9",
+                  background: "#eef6ff",
+                  cursor: "pointer",
+                  color: "#0066cc",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                🗺️ Sơ đồ bàn
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Mô phỏng Ô TÌM KIẾM KHÁCH HÀNG */}

@@ -1,0 +1,627 @@
+/* ========================================================
+   QH-71: GIAO DIỆN THIẾT LẬP SỐ LƯỢNG BÀN & KHU VỰC
+   ======================================================== */
+
+.tables-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- HEADER QUẢN LÝ BÀN & KHU VỰC --- */
+.tables-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #ffffff;
+  padding: 18px 24px;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.tables-header-left h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #2c3e50;
+  margin: 0 0 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tables-header-left p {
+  margin: 0;
+  font-size: 13px;
+  color: #7f8c8d;
+}
+
+/* Bộ đếm thống kê trạng thái */
+.status-counters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status-badge.all {
+  background: #f1f2f6;
+  color: #2f3542;
+  border: 1px solid #ced6e0;
+}
+
+.status-badge.empty {
+  background: #e8f8f2;
+  color: #10ac84;
+  border: 1px solid #a3e4d7;
+}
+
+.status-badge.occupied {
+  background: #fff0f0;
+  color: #eb4d4b;
+  border: 1px solid #ff7979;
+}
+
+.status-badge.cleaning {
+  background: #fffcf0;
+  color: #f39c12;
+  border: 1px solid #f9ca24;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.empty { background: #10ac84; }
+.status-dot.occupied { background: #eb4d4b; }
+.status-dot.cleaning { background: #f39c12; }
+
+/* Tabs chuyển chế độ: Sơ đồ bàn vs Quản lý Khu vực */
+.view-mode-tabs {
+  display: flex;
+  background: #edf2f7;
+  padding: 4px;
+  border-radius: 10px;
+  gap: 4px;
+}
+
+.mode-tab-btn {
+  padding: 8px 18px;
+  border: none;
+  background: transparent;
+  color: #4a5568;
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-tab-btn.active {
+  background: #ffffff;
+  color: #0066cc;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* ========================================================
+   CHẾ ĐỘ POS: SƠ ĐỒ BÀN DẠNG LƯỚI (GRID) TRỰC QUAN
+   ======================================================== */
+
+.pos-table-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Thanh lọc khu vực */
+.area-filter-bar {
+  display: flex;
+  gap: 10px;
+  background: #ffffff;
+  padding: 12px 18px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  overflow-x: auto;
+  align-items: center;
+}
+
+.filter-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #718093;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+
+.area-filter-btn {
+  padding: 7px 16px;
+  border: 1px solid #dcdde1;
+  background: #f8f9fa;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4b6584;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.area-filter-btn:hover {
+  background: #e4e7eb;
+}
+
+.area-filter-btn.active {
+  background: #0066cc;
+  color: #ffffff;
+  border-color: #0066cc;
+}
+
+/* Lưới sơ đồ bàn (Table Grid) */
+.table-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 18px;
+}
+
+/* Ô bàn đơn lẻ (Table Card) */
+.table-card {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 16px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  border: 2px solid transparent;
+  transition: all 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 140px;
+  position: relative;
+  overflow: hidden;
+}
+
+.table-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* 🟢 MÀU XANH: BÀN TRỐNG */
+.table-card.empty {
+  border-color: #10ac84;
+  background: linear-gradient(180deg, #ffffff 0%, #f6fdfa 100%);
+}
+
+.table-card.empty .table-card-header {
+  color: #10ac84;
+}
+
+.table-card.empty:hover {
+  box-shadow: 0 8px 20px rgba(16, 172, 132, 0.2);
+}
+
+/* 🔴 MÀU ĐỎ: ĐANG CÓ KHÁCH */
+.table-card.occupied {
+  border-color: #eb4d4b;
+  background: linear-gradient(180deg, #ffffff 0%, #fff6f6 100%);
+}
+
+.table-card.occupied .table-card-header {
+  color: #eb4d4b;
+}
+
+.table-card.occupied:hover {
+  box-shadow: 0 8px 20px rgba(235, 77, 75, 0.2);
+}
+
+/* 🟡 MÀU VÀNG: ĐANG DỌN DẸP */
+.table-card.cleaning {
+  border-color: #f39c12;
+  background: linear-gradient(180deg, #ffffff 0%, #fffdf6 100%);
+}
+
+.table-card.cleaning .table-card-header {
+  color: #d35400;
+}
+
+.table-card.cleaning:hover {
+  box-shadow: 0 8px 20px rgba(243, 156, 18, 0.2);
+}
+
+/* Nội dung bên trong thẻ bàn */
+.table-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.table-title {
+  font-size: 17px;
+  font-weight: 800;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.table-status-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+}
+
+.table-status-pill.empty {
+  background: #e8f8f2;
+  color: #10ac84;
+}
+
+.table-status-pill.occupied {
+  background: #fff0f0;
+  color: #eb4d4b;
+}
+
+.table-status-pill.cleaning {
+  background: #fffcf0;
+  color: #d35400;
+}
+
+.table-area-tag {
+  font-size: 12px;
+  color: #718093;
+  margin-bottom: 10px;
+}
+
+/* Thông tin đơn hàng bàn có khách */
+.table-order-info {
+  background: rgba(235, 77, 75, 0.06);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.order-detail-row {
+  display: flex;
+  justify-content: space-between;
+  color: #576574;
+  margin-bottom: 2px;
+}
+
+.order-detail-amount {
+  font-weight: 700;
+  color: #eb4d4b;
+  font-size: 14px;
+}
+
+/* Footer thẻ bàn */
+.table-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px dashed rgba(0, 0, 0, 0.08);
+  padding-top: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #8395a7;
+}
+
+.quick-action-link {
+  font-weight: 600;
+  color: #0066cc;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.quick-action-link:hover {
+  text-decoration: underline;
+}
+
+/* ========================================================
+   CHẾ ĐỘ QUẢN LÝ (ADMIN): THIẾT LẬP KHU VỰC & BÀN
+   ======================================================== */
+
+.admin-management-view {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 900px) {
+  .admin-management-view {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-panel {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+}
+
+.admin-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.admin-panel-header h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #2c3e50;
+  margin: 0;
+}
+
+.btn-primary-sm {
+  padding: 6px 12px;
+  background: #0066cc;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.2s;
+}
+
+.btn-primary-sm:hover {
+  background: #0052a3;
+}
+
+.btn-success-sm {
+  padding: 6px 12px;
+  background: #10ac84;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-success-sm:hover {
+  background: #0e8f6d;
+}
+
+/* Danh sách Khu vực */
+.area-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.area-item {
+  border: 1.5px solid #edf2f7;
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.area-item:hover {
+  border-color: #cbd5e0;
+  background: #f7fafc;
+}
+
+.area-item.selected {
+  border-color: #0066cc;
+  background: #ebf8ff;
+}
+
+.area-item-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.area-item-info p {
+  margin: 0;
+  font-size: 12px;
+  color: #718096;
+}
+
+.area-item-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: #a0aec0;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+
+.icon-btn:hover {
+  color: #2d3748;
+}
+
+.icon-btn.delete:hover {
+  color: #e53e3e;
+}
+
+/* Danh sách Bàn dạng Bảng (Table List) */
+.tables-table-wrapper {
+  overflow-x: auto;
+}
+
+.tables-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tables-data-table th {
+  background: #f8fafc;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 700;
+  color: #475569;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.tables-data-table td {
+  padding: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+}
+
+.tables-data-table tr:hover {
+  background: #f8fafc;
+}
+
+.table-status-select {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  outline: none;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #94a3b8;
+}
+
+.empty-state-icon {
+  font-size: 36px;
+  margin-bottom: 10px;
+  display: block;
+}
+
+/* ========================================================
+   MODAL TƯƠNG TÁC BÀN & THIẾT LẬP
+   ======================================================== */
+.modal-table-detail {
+  width: 440px;
+  padding: 24px;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.table-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.table-detail-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.status-switch-group {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.status-switch-btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1.5px solid #e2e8f0;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.status-switch-btn.empty {
+  color: #10ac84;
+}
+.status-switch-btn.empty.active {
+  background: #10ac84;
+  color: white;
+  border-color: #10ac84;
+}
+
+.status-switch-btn.occupied {
+  color: #eb4d4b;
+}
+.status-switch-btn.occupied.active {
+  background: #eb4d4b;
+  color: white;
+  border-color: #eb4d4b;
+}
+
+.status-switch-btn.cleaning {
+  color: #f39c12;
+}
+.status-switch-btn.cleaning.active {
+  background: #f39c12;
+  color: white;
+  border-color: #f39c12;
+}
+
+.btn-open-pos {
+  width: 100%;
+  padding: 12px;
+  background: #0066cc;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: background 0.2s;
+}
+
+.btn-open-pos:hover {
+  background: #0052a3;
+}

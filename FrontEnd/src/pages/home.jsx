@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "../../css/home.css";
 import PosOrder from "../components/PosOrder";
+import TableManagement from "../components/TableManagement";
 import {
   Clock,
   User,
@@ -63,6 +64,9 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState(
     currentRole === "staff" ? "pos" : "dashboard",
   );
+
+  // Bàn đang được chọn để tạo đơn tại POS
+  const [selectedPosTable, setSelectedPosTable] = useState("Bàn 01");
 
   // Đồng hồ thời gian thực
   const [currentTime, setCurrentTime] = useState(
@@ -354,7 +358,23 @@ export default function Home() {
 
         <div className="content-body">
           {/* TAB 1: PHÂN HỆ TẠO ĐƠN & THANH TOÁN (POS) */}
-          {activeTab === "pos" && <PosOrder />}
+          {activeTab === "pos" && (
+            <PosOrder
+              selectedTableProp={selectedPosTable}
+              onNavigateToTables={() => setActiveTab("tables")}
+            />
+          )}
+
+          {/* TAB SƠ ĐỒ BÀN & QUẢN LÝ KHU VỰC (QH-71) */}
+          {activeTab === "tables" && (
+            <TableManagement
+              currentRole={currentRole}
+              onSelectTableForPos={(tableName) => {
+                setSelectedPosTable(tableName);
+                setActiveTab("pos");
+              }}
+            />
+          )}
 
           {/* TAB 2: QUẢN LÝ KHÁCH HÀNG */}
           {activeTab === "customers" && (
@@ -703,15 +723,17 @@ export default function Home() {
           )}
 
           {/* TAB PLACEHOLDER DÀNH CHO CÁC PHÂN HỆ KHÁC */}
-          {activeTab !== "pos" && activeTab !== "customers" && (
-            <div className="tab-placeholder">
-              <Coffee size={28} className="placeholder-icon" />
-              <h2>
-                Phân hệ: {menuList.find((m) => m.id === activeTab)?.label}
-              </h2>
-              <p>Sẵn sàng kết nối MySQL cho phân hệ này.</p>
-            </div>
-          )}
+          {activeTab !== "pos" &&
+            activeTab !== "customers" &&
+            activeTab !== "tables" && (
+              <div className="tab-placeholder">
+                <Coffee size={28} className="placeholder-icon" />
+                <h2>
+                  Phân hệ: {menuList.find((m) => m.id === activeTab)?.label}
+                </h2>
+                <p>Sẵn sàng kết nối MySQL cho phân hệ này.</p>
+              </div>
+            )}
         </div>
       </main>
     </div>
