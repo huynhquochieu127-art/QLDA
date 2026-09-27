@@ -15,28 +15,49 @@ import {
   BarChart2,
   FileText,
   Download,
-  Upload,
   TestTube,
   Home as HomeIcon,
   Search,
   Bell,
-  PlusCircle,
-  TrendingUp,
-  FileSpreadsheet,
+  Settings,
+  ShieldCheck,
+  Package,
+  CreditCard,
+  Grid,
 } from "lucide-react";
 
 export default function Home() {
   const navigate = useNavigate();
 
-  // Lấy thông tin người dùng từ storage
+  // 1. LẤY THÔNG TIN VÀ CHUẨN HÓA ROLE TỪ STORAGE
   const userStr =
     sessionStorage.getItem("user") || localStorage.getItem("user");
   const user = userStr
     ? JSON.parse(userStr)
     : { name: "Nguyễn Hải Hậu", role: "Admin" };
 
-  // Quản lý tab đang chọn
-  const [activeTab, setActiveTab] = useState("dashboard");
+  // Chuẩn hóa role về dạng thường để so sánh (admin | manager/quanly | staff/nhanvien)
+  const rawRole = (user.role || user.MaVaiTro || "staff")
+    .toString()
+    .toLowerCase();
+
+  let currentRole = "staff"; // Mặc định là nhân viên
+  if (rawRole.includes("admin") || rawRole === "1") {
+    currentRole = "admin";
+  } else if (
+    rawRole.includes("quản lý") ||
+    rawRole.includes("manager") ||
+    rawRole === "2"
+  ) {
+    currentRole = "manager";
+  } else {
+    currentRole = "staff";
+  }
+
+  // Set tab mặc định: Nhân viên vào thẳng màn hình Bán hàng (POS), Admin/Quản lý vào Dashboard
+  const [activeTab, setActiveTab] = useState(
+    currentRole === "staff" ? "pos" : "dashboard",
+  );
 
   // Đồng hồ thời gian thực
   const [currentTime, setCurrentTime] = useState(
@@ -49,6 +70,72 @@ export default function Home() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // 2. ĐỊNH NGHĨA DANH SÁCH MENU THEO QUYỀN
+  const menuList = [
+    {
+      id: "dashboard",
+      label: "Trang chủ / Dashboard",
+      icon: <HomeIcon size={18} />,
+      roles: ["admin", "manager"],
+    },
+    // Chức năng dành riêng cho Nhân viên (POS)
+    {
+      id: "pos",
+      label: "Tạo đơn & Thanh toán (POS)",
+      icon: <CreditCard size={18} />,
+      roles: ["staff", "admin", "manager"],
+    },
+    {
+      id: "tables",
+      label: "Sơ đồ bàn",
+      icon: <Grid size={18} />,
+      roles: ["staff", "admin", "manager"],
+    },
+    // Chức năng Quản lý & Admin
+    {
+      id: "inventory",
+      label: "Quản lý kho & Đồ uống",
+      icon: <Package size={18} />,
+      roles: ["manager", "admin"],
+    },
+    {
+      id: "shifts_approval",
+      label: "Duyệt ca làm & Chấm công",
+      icon: <Calendar size={18} />,
+      roles: ["manager", "admin"],
+    },
+    {
+      id: "reports",
+      label: "Báo cáo doanh thu",
+      icon: <BarChart2 size={18} />,
+      roles: ["manager", "admin"],
+    },
+    // Chức năng nâng cao dành riêng cho Admin
+    {
+      id: "hr",
+      label: "Quản lý nhân sự & Phân quyền",
+      icon: <Users size={18} />,
+      roles: ["admin"],
+    },
+    {
+      id: "settings",
+      label: "Cấu hình hệ thống",
+      icon: <Settings size={18} />,
+      roles: ["admin"],
+    },
+    {
+      id: "ai",
+      label: "Gợi ý AI / ML",
+      icon: <Bot size={18} />,
+      roles: ["admin", "manager"],
+    },
+  ];
+
+  // Lọc ra các menu mà Role hiện tại được phép xem
+  const allowedMenus = menuList.filter((item) =>
+    item.roles.includes(currentRole),
+  );
 
   // Xử lý Đăng xuất
   const handleLogout = () => {
@@ -67,79 +154,20 @@ export default function Home() {
         </div>
 
         <nav className="sidebar-nav">
-          <button
-            className={`nav-item ${activeTab === "dashboard" ? "active" : ""}`}
-            onClick={() => setActiveTab("dashboard")}
-          >
-            <HomeIcon size={18} /> <span>Trang chủ / Dashboard</span>
-          </button>
+          <div className="nav-group-title">
+            CHỨC NĂNG ({currentRole.toUpperCase()})
+          </div>
 
-          <div className="nav-group-title">QUẢN LÝ DỰ ÁN</div>
-
-          <button
-            className={`nav-item ${activeTab === "hr" ? "active" : ""}`}
-            onClick={() => setActiveTab("hr")}
-          >
-            <Users size={18} /> <span>Quản lý nhân sự</span>
-          </button>
-
-          <button
-            className={`nav-item ${activeTab === "shifts" ? "active" : ""}`}
-            onClick={() => setActiveTab("shifts")}
-          >
-            <Calendar size={18} /> <span>Quản lý ca làm</span>
-          </button>
-
-          <button
-            className={`nav-item ${activeTab === "attendance" ? "active" : ""}`}
-            onClick={() => setActiveTab("attendance")}
-          >
-            <CheckSquare size={18} /> <span>Chấm công</span>
-          </button>
-
-          <button
-            className={`nav-item ${activeTab === "products" ? "active" : ""}`}
-            onClick={() => setActiveTab("products")}
-          >
-            <Coffee size={18} /> <span>Quản lý đồ uống</span>
-          </button>
-
-          <button
-            className={`nav-item ${activeTab === "orders" ? "active" : ""}`}
-            onClick={() => setActiveTab("orders")}
-          >
-            <ShoppingCart size={18} /> <span>Quản lý bán hàng</span>
-          </button>
-
-          <div className="nav-group-title">NÂNG CAO & BÁO CÁO</div>
-
-          <button
-            className={`nav-item ${activeTab === "ai" ? "active" : ""}`}
-            onClick={() => setActiveTab("ai")}
-          >
-            <Bot size={18} /> <span>AI / ML Gợi ý</span>
-          </button>
-
-          <button
-            className={`nav-item ${activeTab === "reports" ? "active" : ""}`}
-            onClick={() => setActiveTab("reports")}
-          >
-            <BarChart2 size={18} /> <span>Thống kê & Báo cáo</span>
-          </button>
-
-          <button
-            className={`nav-item ${activeTab === "data" ? "active" : ""}`}
-            onClick={() => setActiveTab("data")}
-          >
-            <Download size={18} /> <span>Import / Export</span>
-          </button>
-
-          <button
-            className={`nav-item ${activeTab === "testing" ? "active" : ""}`}
-            onClick={() => setActiveTab("testing")}
-          >
-            <TestTube size={18} /> <span>Kiểm thử hệ thống</span>
-          </button>
+          {allowedMenus.map((item) => (
+            <button
+              key={item.id}
+              className={`nav-item ${activeTab === item.id ? "active" : ""}`}
+              onClick={() => setActiveTab(item.id)}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </button>
+          ))}
         </nav>
 
         <div className="sidebar-footer">
@@ -155,7 +183,7 @@ export default function Home() {
         <header className="main-header">
           <div className="search-bar">
             <Search size={18} />
-            <input type="text" placeholder="Tìm kiếm / Lọc dữ liệu..." />
+            <input type="text" placeholder="Tìm kiếm nhanh..." />
           </div>
 
           <div className="header-right">
@@ -164,34 +192,47 @@ export default function Home() {
               <span>{currentTime}</span>
             </div>
 
-            <button className="icon-btn">
-              <Bell size={18} />
-            </button>
-
             <div className="user-profile">
               <User size={20} />
               <div className="user-info">
                 <span className="user-name">
-                  {user.name || user.TenNguoiDung || "Hải Hậu"}
+                  {user.name || user.TenNguoiDung || "Người dùng"}
                 </span>
-                <span className="user-role">
-                  {user.role || "Quản trị viên"}
+                <span className="user-role-badge">
+                  {currentRole === "admin" && "👑 Admin (Toàn quyền)"}
+                  {currentRole === "manager" && "💼 Quản lý"}
+                  {currentRole === "staff" && "☕ Nhân viên (POS)"}
                 </span>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Nội dung thay đổi theo Tab */}
+        {/* ================= NỘI DUNG THEO ROLE ================= */}
         <div className="content-body">
+          {/* 1. MÀN HÌNH BÁN HÀNG FOR STAFF */}
+          {activeTab === "pos" && (
+            <div className="pos-view">
+              <h2>Màn hình Bán hàng & Thanh toán (POS)</h2>
+              <p>
+                Chức năng tạo đơn hàng, gọi món và xuất hóa đơn cho nhân viên.
+              </p>
+              {/* Thêm Component Order / Cart tại đây */}
+            </div>
+          )}
+
+          {/* 2. MÀN HÌNH DASHBOARD FOR ADMIN & MANAGER */}
           {activeTab === "dashboard" && (
             <div className="dashboard-view">
               <div className="view-header">
                 <h1>Tổng quan hệ thống</h1>
-                <p>Hệ thống Quản lý Quán Cà phê (QuanLyCF)</p>
+                <p>
+                  Bảng điều khiển dành cho{" "}
+                  {currentRole === "admin" ? "Admin" : "Quản lý"}
+                </p>
               </div>
 
-              {/* Các Thẻ Thống Kê Nhanh */}
+              {/* Thống kê doanh thu */}
               <div className="stats-grid">
                 <div className="stat-card">
                   <div className="stat-icon revenue">
@@ -199,7 +240,7 @@ export default function Home() {
                   </div>
                   <div className="stat-info">
                     <span>Doanh thu hôm nay</span>
-                    <h3>3,250,000 VNĐ</h3>
+                    <h3>code</h3>
                   </div>
                 </div>
 
@@ -208,173 +249,32 @@ export default function Home() {
                     <ShoppingCart />
                   </div>
                   <div className="stat-info">
-                    <span>Đơn hàng</span>
-                    <h3>54 đơn</h3>
+                    <span>Tổng đơn hàng</span>
+                    <h3>code</h3>
                   </div>
                 </div>
 
-                <div className="stat-card">
-                  <div className="stat-icon staff">
-                    <Users />
-                  </div>
-                  <div className="stat-info">
-                    <span>Nhân sự ca này</span>
-                    <h3>6 / 12</h3>
-                  </div>
-                </div>
-
-                <div className="stat-card">
-                  <div className="stat-icon ai">
-                    <Bot />
-                  </div>
-                  <div className="stat-info">
-                    <span>Gợi ý AI bán chạy</span>
-                    <h3>Cà phê Muối</h3>
-                  </div>
-                </div>
-              </div>
-
-              {/* Danh sách các Mô-đun Tính năng */}
-              <div className="features-section">
-                <h2>Danh mục tính năng hệ thống</h2>
-                <div className="modules-grid">
-                  {/* Quản lý Nhân sự */}
-                  <div className="module-card">
-                    <div className="card-header">
-                      <Users className="icon" />
-                      <h3>Quản lý Nhân sự</h3>
+                {currentRole === "admin" && (
+                  <div className="stat-card">
+                    <div className="stat-icon staff">
+                      <Users />
                     </div>
-                    <ul>
-                      <li>
-                        <PlusCircle size={14} /> Thêm / Sửa / Xóa nhân viên
-                      </li>
-                      <li>
-                        <Search size={14} /> Tìm kiếm & Lọc nhân sự
-                      </li>
-                    </ul>
-                  </div>
-
-                  {/* Quản lý Ca làm */}
-                  <div className="module-card">
-                    <div className="card-header">
-                      <Calendar className="icon" />
-                      <h3>Quản lý Ca làm</h3>
+                    <div className="stat-info">
+                      <span>Nhân sự quản lý</span>
+                      <h3>code</h3>
                     </div>
-                    <ul>
-                      <li>
-                        <PlusCircle size={14} /> Tạo & Phân ca làm việc
-                      </li>
-                      <li>
-                        <Calendar size={14} /> Xem lịch & Sửa/xóa ca
-                      </li>
-                    </ul>
                   </div>
-
-                  {/* Chấm công */}
-                  <div className="module-card">
-                    <div className="card-header">
-                      <CheckSquare className="icon" />
-                      <h3>Chấm công</h3>
-                    </div>
-                    <ul>
-                      <li>
-                        <CheckSquare size={14} /> Check-in / Check-out
-                      </li>
-                      <li>
-                        <Clock size={14} /> Thống kê đi trễ / về sớm
-                      </li>
-                    </ul>
-                  </div>
-
-                  {/* Quản lý Đồ uống */}
-                  <div className="module-card">
-                    <div className="card-header">
-                      <Coffee className="icon" />
-                      <h3>Quản lý Sản phẩm</h3>
-                    </div>
-                    <ul>
-                      <li>
-                        <PlusCircle size={14} /> CRUD Danh mục & Đồ uống
-                      </li>
-                      <li>
-                        <Search size={14} /> Tìm kiếm & Lọc sản phẩm
-                      </li>
-                    </ul>
-                  </div>
-
-                  {/* Quản lý Bán hàng */}
-                  <div className="module-card">
-                    <div className="card-header">
-                      <ShoppingCart className="icon" />
-                      <h3>Quản lý Bán hàng</h3>
-                    </div>
-                    <ul>
-                      <li>
-                        <PlusCircle size={14} /> Tạo đơn & Quản lý trạng thái
-                      </li>
-                      <li>
-                        <TrendingUp size={14} /> Theo dõi doanh thu thời gian
-                        thực
-                      </li>
-                    </ul>
-                  </div>
-
-                  {/* AI / ML */}
-                  <div className="module-card highlight">
-                    <div className="card-header">
-                      <Bot className="icon" />
-                      <h3>Mô hình AI / ML</h3>
-                    </div>
-                    <ul>
-                      <li>
-                        <Bot size={14} /> Gợi ý đồ uống theo xu hướng
-                      </li>
-                      <li>
-                        <TrendingUp size={14} /> Gợi ý dựa trên lịch sử mua hàng
-                      </li>
-                    </ul>
-                  </div>
-
-                  {/* Báo cáo & Xuất dữ liệu */}
-                  <div className="module-card">
-                    <div className="card-header">
-                      <FileText className="icon" />
-                      <h3>Báo cáo & Dữ liệu</h3>
-                    </div>
-                    <ul>
-                      <li>
-                        <FileSpreadsheet size={14} /> Xuất PDF / Xuất Excel
-                      </li>
-                      <li>
-                        <Upload size={14} /> Import / Export dữ liệu
-                      </li>
-                    </ul>
-                  </div>
-
-                  {/* Kiểm thử */}
-                  <div className="module-card">
-                    <div className="card-header">
-                      <TestTube className="icon" />
-                      <h3>Kiểm thử Hệ thống</h3>
-                    </div>
-                    <ul>
-                      <li>
-                        <TestTube size={14} /> Test API & Luồng dữ liệu
-                      </li>
-                    </ul>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* Các giao diện phụ khi nhấn Sidebar */}
-          {activeTab !== "dashboard" && (
+          {/* 3. CÁC TẠM THỜI CHO TAB KHÁC */}
+          {!["pos", "dashboard"].includes(activeTab) && (
             <div className="tab-placeholder">
               <h2>Mô-đun: {activeTab.toUpperCase()}</h2>
               <p>
-                Nội dung chi tiết cho trang này đang được kết nối với Backend
-                API...
+                Bạn đang truy cập với quyền: <strong>{currentRole}</strong>
               </p>
             </div>
           )}
