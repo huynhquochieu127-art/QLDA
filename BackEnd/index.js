@@ -1,3 +1,5 @@
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const cors = require("cors");
 const mysql = require("mysql2/promise");
@@ -6,14 +8,46 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Lấy Secret Key từ .env hoặc fallback
+const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_key";
+const jwt = require("jsonwebtoken");
+
 // Kết nối MySQL Database
+console.log("DB_PASSWORD from env is:", process.env.DB_PASSWORD);
 const db = mysql.createPool({
-  host: "localhost",
-  user: "root",
-  password: "", // Điền mật khẩu MySQL của bạn nếu có
-  database: "quanlycf", // Tên database của bạn
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "12345", // Hardcode 12345 để dự phòng nếu .env lỗi
+  database: process.env.DB_NAME || "dacnpm", // Hardcode dacnpm để dự phòng
   waitForConnections: true,
   connectionLimit: 10,
+});
+
+// ==========================================
+// 0. API AUTH (ĐĂNG NHẬP)
+// ==========================================
+app.post("/api/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // TODO: Truy vấn database thực tế ở đây (ví dụ bảng taikhoan hoặc nhanvien)
+    // Tạm thời hardcode admin để bạn có thể test đăng nhập được luôn:
+    if (email === "admin@gmail.com" && password === "123456") {
+      const user = { id: 1, email: "admin@gmail.com", role: "admin", name: "Admin" };
+      const accessToken = jwt.sign(user, JWT_SECRET, { expiresIn: "1h" });
+
+      return res.json({
+        success: true,
+        message: "Đăng nhập thành công!",
+        user: user,
+        accessToken: accessToken
+      });
+    }
+
+    return res.status(401).json({ success: false, message: "Sai email hoặc mật khẩu!" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Lỗi server: " + error.message });
+  }
 });
 
 // Hàm tính Rank tự động
@@ -158,6 +192,187 @@ app.post("/api/orders", async (req, res) => {
     res.status(500).json({ message: "Lỗi thanh toán: " + err.message });
   } finally {
     connection.release();
+  }
+});
+
+// ==========================================
+// 3. API DANH MỤC (CATEGORIES)
+// ==========================================
+
+// [GET] Lấy danh sách Danh mục
+app.get("/api/categories", async (req, res) => {
+  try {
+    const [rows] = await db.query("SELECT * FROM danhmuc ORDER BY MaDanhMuc DESC");
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [POST] Thêm mới Danh mục
+app.post("/api/categories", async (req, res) => {
+  try {
+    const { tenDanhMuc } = req.body;
+    if (!tenDanhMuc) {
+      return res.status(400).json({ message: "Vui lòng nhập tên danh mục!" });
+    }
+    const [result] = await db.query(
+      "INSERT INTO danhmuc (TenDanhMuc) VALUES (?)",
+      [tenDanhMuc]
+    );
+    res.status(201).json({ message: "Thêm danh mục thành công!", id: result.insertId });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [PUT] Sửa/Cập nhật Danh mục
+app.put("/api/categories/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tenDanhMuc } = req.body;
+    if (!tenDanhMuc) {
+      return res.status(400).json({ message: "Vui lòng nhập tên danh mục!" });
+    }
+    const [result] = await db.query(
+      "UPDATE danhmuc SET TenDanhMuc = ? WHERE MaDanhMuc = ?",
+      [tenDanhMuc, id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Không tìm thấy danh mục!" });
+    }
+    res.json({ message: "Cập nhật danh mục thành công!" });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [DELETE] Xóa Danh mục (Cảnh báo nếu có đồ uống)
+app.delete("/api/categories/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Kiểm tra xem danh mục có đang chứa đồ uống (sản phẩm) nào không
+    // Giả sử bảng đồ uống là `sanpham` và có khóa ngoại `MaDanhMuc`
+    const [products] = await db.query(
+      "SELECT COUNT(*) as count FROM sanpham WHERE MaDanhMuc = ?",
+      [id]
+    );
+
+    if (products[0].count > 0) {
+      return res.status(400).json({ 
+        message: "Cảnh báo: Không thể xóa! Danh mục này đang chứa đồ uống bên trong." 
+      });
+    }
+
+    const [result] = await db.query("DELETE FROM danhmuc WHERE MaDanhMuc = ?", [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Không tìm thấy danh mục để xóa!" });
+    }
+    
+    res.json({ message: "Xóa danh mục thành công!" });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// ==========================================
+// 4. API SẢN PHẨM / ĐỒ UỐNG (PRODUCTS)
+// ==========================================
+
+// [GET] Lấy danh sách đồ uống (có thể lọc theo danh mục)
+app.get("/api/products", async (req, res) => {
+  try {
+    const { maDanhMuc } = req.query;
+    let sql = `
+      SELECT 
+        sp.MaSanPham, sp.TenSanPham, sp.Gia, sp.MoTa, sp.CoBan,
+        sp.MaDanhMuc, dm.TenDanhMuc
+      FROM sanpham sp
+      LEFT JOIN danhmuc dm ON sp.MaDanhMuc = dm.MaDanhMuc
+    `;
+    const params = [];
+    if (maDanhMuc) {
+      sql += " WHERE sp.MaDanhMuc = ?";
+      params.push(maDanhMuc);
+    }
+    sql += " ORDER BY sp.MaSanPham DESC";
+    const [rows] = await db.query(sql, params);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [GET] Lấy chi tiết 1 sản phẩm theo ID
+app.get("/api/products/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [rows] = await db.query(
+      `SELECT sp.*, dm.TenDanhMuc 
+       FROM sanpham sp 
+       LEFT JOIN danhmuc dm ON sp.MaDanhMuc = dm.MaDanhMuc
+       WHERE sp.MaSanPham = ?`,
+      [id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy sản phẩm!" });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [POST] Thêm mới sản phẩm/đồ uống
+app.post("/api/products", async (req, res) => {
+  try {
+    const { tenSanPham, gia, moTa, coBan, maDanhMuc } = req.body;
+    if (!tenSanPham || gia === undefined) {
+      return res.status(400).json({ message: "Vui lòng nhập Tên và Giá sản phẩm!" });
+    }
+    const [result] = await db.query(
+      "INSERT INTO sanpham (TenSanPham, Gia, MoTa, CoBan, MaDanhMuc) VALUES (?, ?, ?, ?, ?)",
+      [tenSanPham, gia, moTa || null, coBan ? 1 : 0, maDanhMuc || null]
+    );
+    res.status(201).json({ message: "Thêm sản phẩm thành công!", id: result.insertId });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [PUT] Cập nhật sản phẩm/đồ uống
+app.put("/api/products/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tenSanPham, gia, moTa, coBan, maDanhMuc } = req.body;
+    if (!tenSanPham || gia === undefined) {
+      return res.status(400).json({ message: "Vui lòng nhập Tên và Giá sản phẩm!" });
+    }
+    const [result] = await db.query(
+      "UPDATE sanpham SET TenSanPham = ?, Gia = ?, MoTa = ?, CoBan = ?, MaDanhMuc = ? WHERE MaSanPham = ?",
+      [tenSanPham, gia, moTa || null, coBan ? 1 : 0, maDanhMuc || null, id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Không tìm thấy sản phẩm!" });
+    }
+    res.json({ message: "Cập nhật sản phẩm thành công!" });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [DELETE] Xóa sản phẩm
+app.delete("/api/products/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await db.query("DELETE FROM sanpham WHERE MaSanPham = ?", [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Không tìm thấy sản phẩm để xóa!" });
+    }
+    res.json({ message: "Xóa sản phẩm thành công!" });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
   }
 });
 

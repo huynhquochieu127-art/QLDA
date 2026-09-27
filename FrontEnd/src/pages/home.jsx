@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import "../../css/home.css";
 import PosOrder from "../components/PosOrder";
 import TableManagement from "../components/TableManagement";
+import CategoryManagement from "../components/CategoryManagement";
+import ProductManagement from "../components/ProductManagement";
 import {
   Clock,
   User,
@@ -256,8 +258,14 @@ export default function Home() {
       roles: ["staff", "admin", "manager"],
     },
     {
+      id: "categories",
+      label: "Quản lý Danh mục",
+      icon: <Grid size={18} />,
+      roles: ["manager", "admin"],
+    },
+    {
       id: "inventory",
-      label: "Quản lý kho & Đồ uống",
+      label: "Quản lý Đồ Uống & Thực Đơn",
       icon: <Package size={18} />,
       roles: ["manager", "admin"],
     },
@@ -374,6 +382,16 @@ export default function Home() {
                 setActiveTab("pos");
               }}
             />
+          )}
+
+          {/* TAB QUẢN LÝ DANH MỤC */}
+          {activeTab === "categories" && (
+            <CategoryManagement currentRole={currentRole} />
+          )}
+
+          {/* TAB QUẢN LÝ ĐỒ UỐNG & THỰC ĐƠN */}
+          {activeTab === "inventory" && (
+            <ProductManagement currentRole={currentRole} />
           )}
 
           {/* TAB 2: QUẢN LÝ KHÁCH HÀNG */}
@@ -725,6 +743,8 @@ export default function Home() {
           {/* TAB PLACEHOLDER DÀNH CHO CÁC PHÂN HỆ KHÁC */}
           {activeTab !== "pos" &&
             activeTab !== "customers" &&
+            activeTab !== "categories" &&
+            activeTab !== "inventory" &&
             activeTab !== "tables" && (
               <div className="tab-placeholder">
                 <Coffee size={28} className="placeholder-icon" />
