@@ -376,7 +376,184 @@ app.delete("/api/products/:id", async (req, res) => {
   }
 });
 
-const PORT = 5000;
+// ==========================================
+// 5. API THANH TOÁN (CHECKOUT / PAYMENT)
+// ==========================================
+// [POST] Tiếp nhận & Xử lý thanh toán đơn hàng
+// Body: { maBan, maNhanVien, maKhachHang, items, tongTien, tienKhachDua, phuongThucTT }
+// items: [{ maSanPham, tenSanPham, soLuong, donGia }]
+app.post("/api/checkout", async (req, res) => {
+  const connection = await db.getConnection();
+  try {
+    // ── Bước 0: Validate đầu vào ──────────────────────────────────────────────
+    const {
+      maBan,
+      maNhanVien,
+      maKhachHang,
+      items,
+      tongTien,
+      tienKhachDua,
+      phuongThucTT = "TIEN_MAT", // 'TIEN_MAT' | 'CHUYEN_KHOAN'
+    } = req.body;
+
+    if (!items || items.length === 0) {
+      return res.status(400).json({ message: "Giỏ hàng trống!" });
+    }
+    if (tongTien === undefined || tongTien === null) {
+      return res.status(400).json({ message: "Thiếu thông tin tổng tiền!" });
+    }
+    if (phuongThucTT === "TIEN_MAT" && (!tienKhachDua || tienKhachDua < tongTien)) {
+      return res.status(400).json({ message: "Tiền khách đưa không đủ!" });
+    }
+
+    // Tính tiền thối (chuyển khoản thì = 0)
+    const tienThoiLai =
+      phuongThucTT === "TIEN_MAT"
+        ? parseFloat(tienKhachDua) - parseFloat(tongTien)
+        : 0;
+
+    // ── Bước 1: Bắt đầu Transaction ──────────────────────────────────────────
+    await connection.beginTransaction();
+
+    // ── Bước 2: Tạo đơn hàng trong bảng donhang ──────────────────────────────
+    const [orderResult] = await connection.query(
+      `INSERT INTO donhang 
+        (MaBan, MaNhanVien, MaKhachHang, TongTien, ThanhTien, PhuongThucThanhToan, TrangThai, NgayDat) 
+       VALUES (?, ?, ?, ?, ?, ?, 'DA_THANH_TOAN', NOW())`,
+      [
+        maBan || null,
+        maNhanVien || null,
+        maKhachHang || null,
+        tongTien,
+        tongTien, // ThanhTien (sau giảm giá nếu có)
+        phuongThucTT,
+      ]
+    );
+    const maDonHang = orderResult.insertId;
+
+    // ── Bước 3: Lưu chi tiết từng món vào chitietdonhang ─────────────────────
+    for (const item of items) {
+      if (!item.soLuong || item.soLuong <= 0) continue;
+      await connection.query(
+        `INSERT INTO chitietdonhang (MaDonHang, MaSanPham, SoLuong, DonGia, ThanhTien)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          maDonHang,
+          item.maSanPham || null,
+          item.soLuong,
+          item.donGia,
+          item.donGia * item.soLuong,
+        ]
+      );
+    }
+
+    // ── Bước 4: Tích điểm khách hàng (10.000đ = 1 điểm) ────────────────────
+    if (maKhachHang) {
+      const pointsEarned = Math.floor(parseFloat(tongTien) / 10000);
+      if (pointsEarned > 0) {
+        await connection.query(
+          "UPDATE khachhang SET DiemTichLuy = DiemTichLuy + ? WHERE MaKhachHang = ?",
+          [pointsEarned, maKhachHang]
+        );
+      }
+    }
+
+    // ── Bước 5: COMMIT — Chỉ lưu sau khi tất cả thành công ──────────────────
+    await connection.commit();
+
+    // ── Trả về kết quả cho Frontend ──────────────────────────────────────────
+    res.status(201).json({
+      success: true,
+      message: "Thanh toán thành công!",
+      data: {
+        maDonHang,
+        tongTien: parseFloat(tongTien),
+        tienKhachDua: parseFloat(tienKhachDua) || parseFloat(tongTien),
+        tienThoiLai,
+        phuongThucTT,
+        thoiGianThanhToan: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    // ── Nếu có bất kỳ lỗi nào → ROLLBACK toàn bộ ────────────────────────────
+    await connection.rollback();
+    console.error("Lỗi thanh toán:", err.message);
+    res.status(500).json({
+      success: false,
+      message: "Thanh toán thất bại! " + err.message,
+    });
+  } finally {
+    connection.release(); // Luôn trả connection về pool
+  }
+});
+
+// [GET] Xem lịch sử đơn hàng / hóa đơn (có phân trang)
+app.get("/api/orders", async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    const [[{ total }]] = await db.query("SELECT COUNT(*) as total FROM donhang");
+
+    const [rows] = await db.query(
+      `SELECT 
+        dh.MaDonHang, dh.NgayDat, dh.TongTien, dh.ThanhTien,
+        dh.PhuongThucThanhToan, dh.TrangThai,
+        kh.HoTen AS TenKhachHang,
+        nv.HoTen AS TenNhanVien,
+        bc.TenBan
+       FROM donhang dh
+       LEFT JOIN khachhang kh ON dh.MaKhachHang = kh.MaKhachHang
+       LEFT JOIN nhanvien nv ON dh.MaNhanVien = nv.MaNhanVien
+       LEFT JOIN bancafe bc ON dh.MaBan = bc.MaBan
+       ORDER BY dh.NgayDat DESC
+       LIMIT ? OFFSET ?`,
+      [limit, offset]
+    );
+
+    res.json({
+      data: rows,
+      totalPages: Math.ceil(total / limit) || 1,
+      currentPage: page,
+      total,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [GET] Xem chi tiết 1 hóa đơn
+app.get("/api/orders/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [[order]] = await db.query(
+      `SELECT dh.*, kh.HoTen AS TenKhachHang, nv.HoTen AS TenNhanVien, bc.TenBan
+       FROM donhang dh
+       LEFT JOIN khachhang kh ON dh.MaKhachHang = kh.MaKhachHang
+       LEFT JOIN nhanvien nv ON dh.MaNhanVien = nv.MaNhanVien
+       LEFT JOIN bancafe bc ON dh.MaBan = bc.MaBan
+       WHERE dh.MaDonHang = ?`,
+      [id]
+    );
+    if (!order) return res.status(404).json({ message: "Không tìm thấy đơn hàng!" });
+
+    const [items] = await db.query(
+      `SELECT ct.*, sp.TenSanPham
+       FROM chitietdonhang ct
+       LEFT JOIN sanpham sp ON ct.MaSanPham = sp.MaSanPham
+       WHERE ct.MaDonHang = ?`,
+      [id]
+    );
+
+    res.json({ ...order, chiTiet: items });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server BackEnd đang chạy tại: http://localhost:${PORT}`);
 });
