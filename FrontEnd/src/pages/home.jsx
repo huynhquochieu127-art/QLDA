@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import "../../css/home.css";
 import PosOrder from "../components/PosOrder";
 import TableManagement from "../components/TableManagement";
+import CategoryManagement from "../components/CategoryManagement";
 import {
   Clock,
   User,
@@ -256,6 +257,12 @@ export default function Home() {
       roles: ["staff", "admin", "manager"],
     },
     {
+      id: "categories",
+      label: "Quản lý Danh mục",
+      icon: <Grid size={18} />,
+      roles: ["manager", "admin"],
+    },
+    {
       id: "inventory",
       label: "Quản lý kho & Đồ uống",
       icon: <Package size={18} />,
@@ -374,6 +381,11 @@ export default function Home() {
                 setActiveTab("pos");
               }}
             />
+          )}
+
+          {/* TAB QUẢN LÝ DANH MỤC */}
+          {activeTab === "categories" && (
+            <CategoryManagement currentRole={currentRole} />
           )}
 
           {/* TAB 2: QUẢN LÝ KHÁCH HÀNG */}
@@ -725,6 +737,7 @@ export default function Home() {
           {/* TAB PLACEHOLDER DÀNH CHO CÁC PHÂN HỆ KHÁC */}
           {activeTab !== "pos" &&
             activeTab !== "customers" &&
+            activeTab !== "categories" &&
             activeTab !== "tables" && (
               <div className="tab-placeholder">
                 <Coffee size={28} className="placeholder-icon" />
