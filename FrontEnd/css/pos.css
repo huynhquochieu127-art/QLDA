@@ -26,59 +26,80 @@
   height: fit-content;
 }
 
-/* --- TÁC VỤ DANH MỤC (CATEGORY) --- */
+/* --- TÁC VỤ DANH MỤC (CATEGORY - TỐI ƯU CẢM ỨNG QH-74) --- */
 .category-bar {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .category-btn {
-  padding: 8px 16px;
-  border: 1px solid #e0e0e0;
-  border-radius: 20px;
+  padding: 10px 20px;
+  min-height: 44px;
+  border: 1.5px solid #dcdde1;
+  border-radius: 22px;
   background: #ffffff;
-  color: #333;
-  font-weight: 500;
+  color: #2f3542;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
+  user-select: none;
+  touch-action: manipulation;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
 }
 
 .category-btn:hover {
-  background: #f0f0f0;
+  background: #f1f2f6;
+  border-color: #0066cc;
+}
+
+.category-btn:active {
+  transform: scale(0.96);
 }
 
 .category-btn.active {
   background: #0066cc;
   color: #ffffff;
   border-color: #0066cc;
+  box-shadow: 0 4px 10px rgba(0, 102, 204, 0.25);
 }
 
-/* --- LƯỚI SẢN PHẨM (PRODUCT GRID) --- */
+/* --- LƯỚI SẢN PHẨM (PRODUCT GRID - TỐI ƯU CHẠM CẢM ỨNG) --- */
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 15px;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 16px;
 }
 
 .product-card {
   background: #ffffff;
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: 12px;
+  padding: 14px;
   text-align: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1.5px solid transparent;
   cursor: pointer;
-  transition:
-    transform 0.2s,
-    box-shadow 0.2s;
+  transition: all 0.2s ease;
   display: flex;
   flex-direction: column;
   align-items: center;
+  user-select: none;
+  touch-action: manipulation;
 }
 
 .product-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: #0066cc;
+  box-shadow: 0 6px 16px rgba(0, 102, 204, 0.12);
+}
+
+.product-card:active {
+  transform: scale(0.97);
+  background: #f8faff;
 }
 
 .product-image {
@@ -286,33 +307,70 @@
 .cart-item-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .cart-item-controls button {
-  width: 24px;
-  height: 24px;
-  border: 1px solid #ddd;
-  background: #fff;
-  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: bold;
+  font-size: 16px;
+  font-weight: 800;
+  color: #1e293b;
+  transition: all 0.15s ease;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.cart-item-controls button:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.cart-item-controls button:active {
+  transform: scale(0.92);
+  background: #cbd5e1;
+}
+
+.cart-item-controls span {
+  min-width: 22px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .delete-btn {
-  color: #dc3545 !important;
-  border-color: #f5c6cb !important;
-  margin-left: 6px;
+  width: 32px !important;
+  height: 32px !important;
+  color: #ef4444 !important;
+  border-color: #fca5a5 !important;
+  background: #fef2f2 !important;
+  font-size: 18px !important;
+  margin-left: 4px;
+  border-radius: 8px !important;
 }
 
-/* --- TỔNG TIỀN & THANH TOÁN --- */
+.delete-btn:hover {
+  background: #fee2e2 !important;
+  border-color: #ef4444 !important;
+}
+
+.delete-btn:active {
+  transform: scale(0.92);
+}
+
+/* --- TỔNG TIỀN & THANH TOÁN (TỐI ƯU NÚT BẤM TO RÕ) --- */
 .sidebar-footer {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .summary-row {
@@ -323,29 +381,42 @@
 }
 
 .summary-row.total {
-  font-size: 16px;
-  font-weight: bold;
+  font-size: 17px;
+  font-weight: 800;
   color: #000;
   border-top: 1px solid #eee;
-  padding-top: 8px;
+  padding-top: 10px;
 }
 
 .checkout-btn {
   width: 100%;
-  padding: 12px;
+  padding: 14px;
+  min-height: 48px;
   background: #0066cc;
   color: white;
   border: none;
-  border-radius: 8px;
-  font-size: 15px;
-  font-weight: bold;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 800;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
   margin-top: 5px;
+  user-select: none;
+  touch-action: manipulation;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.25);
 }
 
 .checkout-btn:hover {
   background: #0052a3;
+  box-shadow: 0 6px 16px rgba(0, 102, 204, 0.35);
+}
+
+.checkout-btn:active {
+  transform: scale(0.98);
 }
 
 /* --- MODAL POPUP --- */
