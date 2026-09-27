@@ -5,6 +5,7 @@ import PosOrder from "../components/PosOrder";
 import TableManagement from "../components/TableManagement";
 import CategoryManagement from "../components/CategoryManagement";
 import ProductManagement from "../components/ProductManagement";
+import OrderManagement from "../components/OrderManagement";
 import {
   Clock,
   User,
@@ -35,6 +36,7 @@ import {
   Gift,
   Loader2,
   Bot,
+  FileText,
 } from "lucide-react";
 
 export default function Home() {
@@ -81,6 +83,15 @@ export default function Home() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Hàm xử lý Đăng xuất triệt để
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("accessToken");
+    sessionStorage.clear();
+    navigate("/login", { replace: true });
+  };
 
   // 2. QUẢN LÝ DỮ LIỆU MYSQL KHÁCH HÀNG
   const [customers, setCustomers] = useState([]);
@@ -133,7 +144,7 @@ export default function Home() {
     }
   };
 
-  // Debounce tìm kiếm SĐT (giúp tránh spam query xuống MySQL)
+  // Debounce tìm kiếm SĐT (tránh spam query xuống MySQL)
   useEffect(() => {
     if (activeTab === "customers") {
       const timer = setTimeout(() => {
@@ -159,13 +170,16 @@ export default function Home() {
     e.preventDefault();
 
     try {
-      const response = await fetch("http://localhost:5000/api/customers", {
-        method: "POST",
+      const isEditing = Boolean(editingCustomer);
+      const url = isEditing ? `${API_URL}/${editingCustomer.id}` : API_URL;
+      const method = isEditing ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method: method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(customerForm),
       });
 
-      // Kiểm tra xem phản hồi có đúng dạng JSON không
       const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         throw new Error(
@@ -179,9 +193,10 @@ export default function Home() {
         throw new Error(resData.message || "Thao tác thất bại!");
       }
 
-      alert("Thêm thành công!");
+      alert(isEditing ? "Cập nhật thành công!" : "Thêm thành công!");
       setShowAddModal(false);
-      fetchCustomersFromMySQL();
+      setEditingCustomer(null);
+      fetchCustomersFromMySQL(customerSearch, currentPage);
     } catch (err) {
       alert(`Lỗi: ${err.message}`);
     }
@@ -231,7 +246,7 @@ export default function Home() {
     }
   };
 
-  // Danh mục Menu
+  // Danh mục Menu (Đã bổ sung Quản lý Hóa đơn & Đơn hàng)
   const menuList = [
     {
       id: "dashboard",
@@ -243,6 +258,12 @@ export default function Home() {
       id: "pos",
       label: "Tạo đơn & Thanh toán (POS)",
       icon: <CreditCard size={18} />,
+      roles: ["staff", "admin", "manager"],
+    },
+    {
+      id: "orders",
+      label: "Quản lý Hóa đơn & Đơn hàng",
+      icon: <FileText size={18} />,
       roles: ["staff", "admin", "manager"],
     },
     {
@@ -331,8 +352,9 @@ export default function Home() {
           ))}
         </nav>
 
+        {/* NÚT ĐĂNG XUẤT */}
         <div className="sidebar-footer">
-          <button className="logout-btn" onClick={() => navigate("/login")}>
+          <button className="logout-btn" onClick={handleLogout}>
             <LogOut size={18} /> <span>Đăng xuất</span>
           </button>
         </div>
@@ -365,7 +387,7 @@ export default function Home() {
         </header>
 
         <div className="content-body">
-          {/* TAB 1: PHÂN HỆ TẠO ĐƠN & THANH TOÁN (POS) */}
+          {/* TAB 1: POS */}
           {activeTab === "pos" && (
             <PosOrder
               selectedTableProp={selectedPosTable}
@@ -373,7 +395,10 @@ export default function Home() {
             />
           )}
 
-          {/* TAB SƠ ĐỒ BÀN & QUẢN LÝ KHU VỰC (QH-71) */}
+          {/* TAB QUẢN LÝ HÓA ĐƠN & ĐƠN HÀNG */}
+          {activeTab === "orders" && <OrderManagement />}
+
+          {/* TAB SƠ ĐỒ BÀN */}
           {activeTab === "tables" && (
             <TableManagement
               currentRole={currentRole}
@@ -389,12 +414,12 @@ export default function Home() {
             <CategoryManagement currentRole={currentRole} />
           )}
 
-          {/* TAB QUẢN LÝ ĐỒ UỐNG & THỰC ĐƠN */}
+          {/* TAB QUẢN LÝ ĐỒ UỐNG */}
           {activeTab === "inventory" && (
             <ProductManagement currentRole={currentRole} />
           )}
 
-          {/* TAB 2: QUẢN LÝ KHÁCH HÀNG */}
+          {/* TAB QUẢN LÝ KHÁCH HÀNG */}
           {activeTab === "customers" && (
             <div className="customers-view">
               <div className="page-header">
@@ -424,7 +449,7 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* BỘ TÌM KIẾM SĐT */}
+              {/* BỘ TÌM KIẾM */}
               <div className="search-container">
                 <div className="search-input-wrapper">
                   <Search size={18} className="search-icon" />
@@ -568,7 +593,7 @@ export default function Home() {
                   </tbody>
                 </table>
 
-                {/* THANH PHÂN TRANG */}
+                {/* PHÂN TRANG */}
                 {totalPages > 1 && (
                   <div className="pagination-bar">
                     <span className="pagination-info">
@@ -600,14 +625,14 @@ export default function Home() {
                 )}
               </div>
 
-              {/* MODAL THÊM / SỬA */}
+              {/* MODAL THÊM / SỬA KHÁCH HÀNG */}
               {showAddModal && (
                 <div className="modal-overlay">
                   <div className="modal-container">
                     <div className="modal-header">
                       <h3>
                         {editingCustomer
-                          ? "Chỉnh sửa (MySQL)"
+                          ? "Chỉnh sửa Khách hàng"
                           : "Thêm mới vào MySQL"}
                       </h3>
                       <button
@@ -742,6 +767,7 @@ export default function Home() {
 
           {/* TAB PLACEHOLDER DÀNH CHO CÁC PHÂN HỆ KHÁC */}
           {activeTab !== "pos" &&
+            activeTab !== "orders" &&
             activeTab !== "customers" &&
             activeTab !== "categories" &&
             activeTab !== "inventory" &&
