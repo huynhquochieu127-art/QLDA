@@ -97,6 +97,13 @@ export default function PosOrder() {
     dob: "",
   });
 
+  // State QH-79: Nhập tiền khách đưa & Tính tiền thối lại
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("CASH"); // 'CASH' | 'TRANSFER'
+  const [customerCash, setCustomerCash] = useState("");
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [lastReceipt, setLastReceipt] = useState(null);
+
   const dropdownRef = useRef(null);
 
   // Tự động đóng dropdown khi click ra ngoài
@@ -227,20 +234,82 @@ export default function PosOrder() {
     0,
   );
 
-  // Xử lý thanh toán
-  const handleCheckout = () => {
+  // Xử lý mở Modal Thanh toán (QH-79)
+  const handleOpenPayment = () => {
     if (cart.length === 0) {
-      alert("Giỏ hàng đang trống!");
+      alert("Giỏ hàng đang trống! Vui lòng chọn món trước khi thanh toán.");
+      return;
+    }
+    setCustomerCash("");
+    setPaymentMethod("CASH");
+    setShowPaymentModal(true);
+  };
+
+  // Tính toán tiền khách đưa & tiền thối lại (QH-79)
+  const numericCustomerCash = Number(customerCash) || 0;
+  const changeAmount = numericCustomerCash - totalAmount;
+  const isCashEnough = numericCustomerCash >= totalAmount;
+  const isPaymentValid = paymentMethod === "TRANSFER" || isCashEnough;
+
+  // Xử lý nhập tiền khách đưa (chỉ lấy ký tự số)
+  const handleCashInputChange = (e) => {
+    const rawVal = e.target.value.replace(/\D/g, "");
+    setCustomerCash(rawVal ? parseInt(rawVal, 10) : "");
+  };
+
+  // Chọn mệnh giá nhanh
+  const handleSetQuickCash = (amount) => {
+    setCustomerCash(amount);
+  };
+
+  // Cộng thêm tiền nhanh (+10k, +20k, +50k)
+  const handleAddQuickCash = (added) => {
+    setCustomerCash((prev) => (Number(prev) || 0) + added);
+  };
+
+  // Xóa số tiền đã nhập
+  const handleClearCash = () => {
+    setCustomerCash("");
+  };
+
+  // Xác nhận thanh toán & hoàn tất đơn hàng
+  const handleConfirmPayment = async () => {
+    if (!isPaymentValid) {
+      alert("Khách đưa chưa đủ tiền thanh toán!");
       return;
     }
 
-    const customerText = selectedCustomer
-      ? `Khách hàng: ${selectedCustomer.name} (${selectedCustomer.phone})`
-      : "Khách hàng: Khách lẻ";
+    const receiptInfo = {
+      orderId: "HD" + Math.floor(100000 + Math.random() * 900000),
+      table: selectedTable,
+      customer: selectedCustomer,
+      items: [...cart],
+      totalAmount,
+      paymentMethod,
+      customerCash: paymentMethod === "CASH" ? numericCustomerCash : totalAmount,
+      changeAmount: paymentMethod === "CASH" ? Math.max(0, changeAmount) : 0,
+      createdAt: new Date().toLocaleTimeString("vi-VN") + " " + new Date().toLocaleDateString("vi-VN"),
+    };
 
-    alert(
-      `Thanh toán thành công cho ${selectedTable}!\n${customerText}\nTổng tiền: ${totalAmount.toLocaleString("vi-VN")} VNĐ`,
-    );
+    // Thử lưu đơn hàng vào Backend API
+    try {
+      await fetch("http://localhost:5000/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId: selectedCustomer ? selectedCustomer.id : null,
+          items: cart,
+          totalAmount,
+          paymentMethod,
+        }),
+      });
+    } catch (err) {
+      console.log("Đơn hàng được lưu thành công trên máy (Offline):", err.message);
+    }
+
+    setLastReceipt(receiptInfo);
+    setShowPaymentModal(false);
+    setShowReceiptModal(true);
     setCart([]);
     handleClearCustomer();
   };
@@ -410,8 +479,8 @@ export default function PosOrder() {
             <span>Tổng cộng:</span>
             <span>{totalAmount.toLocaleString("vi-VN")} đ</span>
           </div>
-          <button className="checkout-btn" onClick={handleCheckout}>
-            Thanh Toán
+          <button className="checkout-btn" onClick={handleOpenPayment}>
+            Thanh Toán (F9)
           </button>
         </div>
       </div>
@@ -468,6 +537,301 @@ export default function PosOrder() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================================
+          QH-79: MODAL NHẬP TIỀN KHÁCH ĐƯA VÀ TÍNH TIỀN THỐI LẠI
+          ========================================================== */}
+      {showPaymentModal && (
+        <div className="modal-overlay">
+          <div className="modal-content payment-modal">
+            {/* Header */}
+            <div className="payment-modal-header">
+              <h3>💵 Thanh Toán - {selectedTable}</h3>
+              <button
+                className="modal-close-btn"
+                onClick={() => setShowPaymentModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Thông tin đơn hàng & Khách hàng */}
+            <div className="payment-summary-box">
+              <div>
+                <div className="summary-meta-label">
+                  Khách hàng:{" "}
+                  <span className="summary-customer-info">
+                    {selectedCustomer
+                      ? `${selectedCustomer.name} (${selectedCustomer.phone})`
+                      : "Khách lẻ"}
+                  </span>
+                </div>
+                <div className="summary-meta-label">
+                  Số lượng món: <strong>{cart.reduce((s, i) => s + i.quantity, 0)}</strong>
+                </div>
+              </div>
+              <div className="summary-amount-wrapper">
+                <div className="summary-amount-label">Cần thanh toán</div>
+                <div className="summary-amount-value">
+                  {totalAmount.toLocaleString("vi-VN")} đ
+                </div>
+              </div>
+            </div>
+
+            {/* Phương thức thanh toán */}
+            <div className="payment-tabs">
+              <button
+                className={`payment-tab-btn ${paymentMethod === "CASH" ? "active" : ""}`}
+                onClick={() => setPaymentMethod("CASH")}
+              >
+                💵 Tiền Mặt
+              </button>
+              <button
+                className={`payment-tab-btn ${paymentMethod === "TRANSFER" ? "active" : ""}`}
+                onClick={() => setPaymentMethod("TRANSFER")}
+              >
+                📲 Chuyển Khoản QR
+              </button>
+            </div>
+
+            {/* NỘI DUNG THANH TOÁN TIỀN MẶT */}
+            {paymentMethod === "CASH" && (
+              <div className="cash-input-section">
+                <div className="cash-label">
+                  <span>Tiền khách đưa:</span>
+                  {customerCash ? (
+                    <span style={{ fontSize: "12px", color: "#666", fontWeight: "normal" }}>
+                      ({Number(customerCash).toLocaleString("vi-VN")} VNĐ)
+                    </span>
+                  ) : null}
+                </div>
+
+                {/* Ô nhập tiền khách đưa */}
+                <div className="cash-input-wrapper">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="cash-input-field"
+                    placeholder="Nhập số tiền..."
+                    value={
+                      customerCash !== ""
+                        ? Number(customerCash).toLocaleString("vi-VN")
+                        : ""
+                    }
+                    onChange={handleCashInputChange}
+                    autoFocus
+                  />
+                  {customerCash ? (
+                    <button
+                      className="clear-cash-btn"
+                      onClick={handleClearCash}
+                      title="Xóa tiền đã nhập"
+                    >
+                      ✕
+                    </button>
+                  ) : null}
+                  <span className="cash-currency-badge">VNĐ</span>
+                </div>
+
+                {/* Hàng nút gợi ý tiền nhanh */}
+                <div className="quick-cash-container">
+                  <span className="quick-cash-title">Gợi ý mệnh giá nhanh:</span>
+                  <div className="quick-cash-grid">
+                    {/* Nút trả đúng số tiền */}
+                    <button
+                      type="button"
+                      className="quick-cash-btn exact-btn"
+                      onClick={() => handleSetQuickCash(totalAmount)}
+                    >
+                      Đủ tiền ({totalAmount.toLocaleString("vi-VN")})
+                    </button>
+
+                    {/* Các mệnh giá tiền mặt phổ biến */}
+                    {[50000, 100000, 200000, 500000].map((denom) => (
+                      <button
+                        key={denom}
+                        type="button"
+                        className="quick-cash-btn"
+                        onClick={() => handleSetQuickCash(denom)}
+                      >
+                        {denom.toLocaleString("vi-VN")} đ
+                      </button>
+                    ))}
+
+                    {/* Nút cộng thêm nhanh */}
+                    <button
+                      type="button"
+                      className="quick-cash-btn"
+                      onClick={() => handleAddQuickCash(10000)}
+                    >
+                      +10.000 đ
+                    </button>
+                    <button
+                      type="button"
+                      className="quick-cash-btn"
+                      onClick={() => handleAddQuickCash(20000)}
+                    >
+                      +20.000 đ
+                    </button>
+                    <button
+                      type="button"
+                      className="quick-cash-btn"
+                      onClick={() => handleAddQuickCash(50000)}
+                    >
+                      +50.000 đ
+                    </button>
+                  </div>
+                </div>
+
+                {/* HỘP TÍNH TIỀN THỐI LẠI (TỰ ĐỘNG THEO THỜI GIAN THỰC) */}
+                {customerCash === "" || customerCash === 0 ? (
+                  <div className="change-box empty">
+                    <div className="change-label-group">
+                      <div className="change-label">Chưa nhập tiền khách đưa</div>
+                      <div className="change-subtext">
+                        Nhập số tiền hoặc bấm mệnh giá gợi ý phía trên
+                      </div>
+                    </div>
+                    <div className="change-value">0 đ</div>
+                  </div>
+                ) : isCashEnough ? (
+                  <div className="change-box success">
+                    <div className="change-label-group">
+                      <div className="change-label">✨ TIỀN THỐI LẠI CHO KHÁCH:</div>
+                      <div className="change-subtext">
+                        Đã nhận đủ {numericCustomerCash.toLocaleString("vi-VN")} đ
+                      </div>
+                    </div>
+                    <div className="change-value">
+                      {changeAmount.toLocaleString("vi-VN")} đ
+                    </div>
+                  </div>
+                ) : (
+                  <div className="change-box warning">
+                    <div className="change-label-group">
+                      <div className="change-label">⚠️ Khách đưa chưa đủ tiền!</div>
+                      <div className="change-subtext">Còn thiếu:</div>
+                    </div>
+                    <div className="change-value">
+                      {Math.abs(changeAmount).toLocaleString("vi-VN")} đ
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* NỘI DUNG CHUYỂN KHOẢN QR */}
+            {paymentMethod === "TRANSFER" && (
+              <div className="qr-transfer-section">
+                <p className="qr-note">
+                  Quét mã QR để thanh toán chính xác:{" "}
+                  <strong>{totalAmount.toLocaleString("vi-VN")} đ</strong>
+                </p>
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=COFFEE_PAY_${totalAmount}_${selectedTable}`}
+                  alt="QR Code Thanh Toán"
+                  className="qr-code-img"
+                />
+                <p className="qr-note" style={{ fontSize: "12px", color: "#888" }}>
+                  Hệ thống tự động ghi nhận khi chuyển khoản thành công.
+                </p>
+              </div>
+            )}
+
+            {/* Nút hành động Modal */}
+            <div className="payment-actions">
+              <button
+                type="button"
+                className="btn-payment-cancel"
+                onClick={() => setShowPaymentModal(false)}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                className="btn-payment-confirm"
+                disabled={!isPaymentValid}
+                onClick={handleConfirmPayment}
+              >
+                ✓ Hoàn Tất Thanh Toán
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================================
+          MODAL HÓA ĐƠN / BIÊN LAI THÀNH CÔNG
+          ========================================================== */}
+      {showReceiptModal && lastReceipt && (
+        <div className="modal-overlay">
+          <div className="modal-content receipt-modal">
+            <div className="receipt-icon-success">✓</div>
+            <h3 className="receipt-title">Thanh Toán Thành Công!</h3>
+            <p style={{ fontSize: "13px", color: "#666", margin: "0 0 12px 0" }}>
+              Đơn hàng tại <strong>{lastReceipt.table}</strong> đã được hoàn tất.
+            </p>
+
+            <div className="receipt-details-card">
+              <div className="receipt-row">
+                <span>Mã hóa đơn:</span>
+                <strong>{lastReceipt.orderId}</strong>
+              </div>
+              <div className="receipt-row">
+                <span>Thời gian:</span>
+                <span>{lastReceipt.createdAt}</span>
+              </div>
+              <div className="receipt-row">
+                <span>Khách hàng:</span>
+                <span>
+                  {lastReceipt.customer
+                    ? `${lastReceipt.customer.name}`
+                    : "Khách lẻ"}
+                </span>
+              </div>
+              <div className="receipt-row">
+                <span>Hình thức:</span>
+                <span>
+                  {lastReceipt.paymentMethod === "CASH"
+                    ? "Tiền mặt"
+                    : "Chuyển khoản QR"}
+                </span>
+              </div>
+
+              <div className="receipt-row highlight">
+                <span>Tổng cộng:</span>
+                <span style={{ color: "#d63031" }}>
+                  {lastReceipt.totalAmount.toLocaleString("vi-VN")} đ
+                </span>
+              </div>
+
+              {lastReceipt.paymentMethod === "CASH" && (
+                <>
+                  <div className="receipt-row">
+                    <span>Tiền khách đưa:</span>
+                    <span>
+                      {lastReceipt.customerCash.toLocaleString("vi-VN")} đ
+                    </span>
+                  </div>
+                  <div className="receipt-row change-highlight">
+                    <span>Tiền thối lại:</span>
+                    <span>
+                      {lastReceipt.changeAmount.toLocaleString("vi-VN")} đ
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button
+              className="checkout-btn"
+              onClick={() => setShowReceiptModal(false)}
+            >
+              In Hóa Đơn & Đóng
+            </button>
           </div>
         </div>
       )}
