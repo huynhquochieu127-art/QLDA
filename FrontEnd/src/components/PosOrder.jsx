@@ -73,14 +73,14 @@ const MOCK_CUSTOMERS = [
   { id: 101, phone: "0905123456", name: "Nguyễn Văn A", dob: "1995-05-20" },
   { id: 102, phone: "0914888999", name: "Trần Thị B", dob: "1998-11-12" },
   { id: 103, phone: "0987654321", name: "Lê Văn C", dob: "2000-01-01" },
-
-  //ket noi backend
 ];
 
 export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
   const [activeCategory, setActiveCategory] = useState("all");
   const [cart, setCart] = useState([]);
-  const [selectedTable, setSelectedTable] = useState(selectedTableProp || "Bàn 01");
+  const [selectedTable, setSelectedTable] = useState(
+    selectedTableProp || "Bàn 01",
+  );
 
   // Đồng bộ bàn khi chọn từ Sơ đồ bàn (QH-71)
   useEffect(() => {
@@ -118,7 +118,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
     dob: "",
   });
 
-  // State QH-79: Nhập tiền khách đưa & Tính tiền thối lại
+  // State QH-79 Nhập tiền khách đưa & Tính tiền thối lại
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("CASH"); // 'CASH' | 'TRANSFER'
   const [customerCash, setCustomerCash] = useState("");
@@ -138,9 +138,9 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Debounce gọi API / tìm kiếm khách hàng khi thu ngân nhập 3 ký tự trở lên
+  // Debounce tìm kiếm khách hàng khi nhập từ 3 ký tự trở lên
   useEffect(() => {
-    if (selectedCustomer) return; // Đã chọn khách hàng thì không tìm nữa
+    if (selectedCustomer) return;
 
     const cleanPhone = phoneSearch.trim();
 
@@ -149,15 +149,13 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
       setShowDropdown(true);
 
       const timer = setTimeout(() => {
-        // TODO: Thay thế đoạn này bằng API call thực tế:
-        // fetch(`/api/customers/search?phone=${cleanPhone}`)
         const results = MOCK_CUSTOMERS.filter((c) =>
           c.phone.includes(cleanPhone),
         );
 
         setCustomerSuggestions(results);
         setIsSearching(false);
-      }, 300); // Debounce 300ms
+      }, 300);
 
       return () => clearTimeout(timer);
     } else {
@@ -195,17 +193,16 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
       return;
     }
 
-    // TODO: Thay bằng API call POST /api/customers
     const createdCustomer = {
       id: Date.now(),
       ...newCustomer,
     };
 
-    MOCK_CUSTOMERS.push(createdCustomer); // Giả lập thêm vào DB
+    MOCK_CUSTOMERS.push(createdCustomer);
     setSelectedCustomer(createdCustomer);
     setPhoneSearch(createdCustomer.phone);
     setShowAddCustomerModal(false);
-    alert(`Đã tạo thành công khách hàng: ${createdCustomer.name}`);
+    alert(`Đã tạo thành công khách hàng ${createdCustomer.name}`);
   };
 
   // Lọc sản phẩm theo danh mục
@@ -229,14 +226,16 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
     });
   };
 
-  // Cập nhật số lượng (tăng / giảm theo delta) (QH-75)
+  // Cập nhật số lượng (QH-75)
   const updateQuantity = (id, delta) => {
     setCart((prevCart) =>
       prevCart
         .map((item) => {
           if (item.id === id) {
             const newQty = item.quantity + delta;
-            return newQty > 0 ? { ...item, quantity: Math.min(newQty, 99) } : null;
+            return newQty > 0
+              ? { ...item, quantity: Math.min(newQty, 99) }
+              : null;
           }
           return item;
         })
@@ -321,12 +320,19 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
       items: [...cart],
       totalAmount,
       paymentMethod,
-      customerCash: paymentMethod === "CASH" ? numericCustomerCash : totalAmount,
+      customerCash:
+        paymentMethod === "CASH" ? numericCustomerCash : totalAmount,
       changeAmount: paymentMethod === "CASH" ? Math.max(0, changeAmount) : 0,
-      createdAt: new Date().toLocaleTimeString("vi-VN") + " " + new Date().toLocaleDateString("vi-VN"),
+      createdAt:
+        new Date().toLocaleTimeString("vi-VN") +
+        " - " +
+        new Date().toLocaleDateString("vi-VN"),
     };
 
+<<<<<<< HEAD
     // ── Lưu đơn hàng vào Backend + Cập nhật trạng thái bàn ──────────────────
+=======
+>>>>>>> 417f2228d9572667a08f100419becfa91b9aaa63
     try {
       // Lấy MaBan từ tên bàn đang chọn (ví dụ "T3" -> cần tìm ID)
       let maBan = null;
@@ -379,7 +385,14 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
         });
       }
     } catch (err) {
+<<<<<<< HEAD
       console.warn("Lưu đơn hàng offline:", err.message);
+=======
+      console.log(
+        "Đơn hàng được lưu thành công trên máy (Offline)",
+        err.message,
+      );
+>>>>>>> 417f2228d9572667a08f100419becfa91b9aaa63
     }
 
     setLastReceipt(receiptInfo);
@@ -452,11 +465,11 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
               <button
                 type="button"
                 onClick={onNavigateToTables}
-                title="Mở Sơ đồ bàn trực quan dạng lưới (Grid) Xanh - Đỏ - Vàng"
+                title="Mở Sơ đồ bàn trực quan dạng lưới (Grid)"
                 style={{
                   padding: "5px 9px",
                   fontSize: "12px",
-                  fontWeight: "600",
+                  fontWeight: 600,
                   borderRadius: "6px",
                   border: "1px solid #b8c8d9",
                   background: "#eef6ff",
@@ -471,7 +484,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
           </div>
         </div>
 
-        {/* Mô phỏng Ô TÌM KIẾM KHÁCH HÀNG */}
+        {/* Tìm kiếm Khách hàng */}
         <div className="customer-search-section" ref={dropdownRef}>
           <label className="section-label">Thông tin khách hàng</label>
           <div className="search-input-wrapper">
@@ -508,7 +521,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
             </div>
           )}
 
-          {/* Gợi ý Dropdown */}
+          {/* Dropdown Gợi ý */}
           {showDropdown && !selectedCustomer && (
             <div className="customer-dropdown">
               {isSearching ? (
@@ -595,11 +608,11 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
         {/* Tổng tiền & Thanh toán */}
         <div className="sidebar-footer">
           <div className="summary-row">
-            <span>Tạm tính:</span>
+            <span>Tạm tính</span>
             <span>{totalAmount.toLocaleString("vi-VN")} đ</span>
           </div>
           <div className="summary-row total">
-            <span>Tổng cộng:</span>
+            <span>Tổng cộng</span>
             <span>{totalAmount.toLocaleString("vi-VN")} đ</span>
           </div>
           <button className="checkout-btn" onClick={handleOpenPayment}>
@@ -608,7 +621,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
         </div>
       </div>
 
-      {/* POPUP / MODAL TẠO KHÁCH HÀNG MỚI */}
+      {/* MODAL TẠO KHÁCH HÀNG MỚI */}
       {showAddCustomerModal && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -664,13 +677,10 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
         </div>
       )}
 
-      {/* ==========================================================
-          QH-79: MODAL NHẬP TIỀN KHÁCH ĐƯA VÀ TÍNH TIỀN THỐI LẠI
-          ========================================================== */}
+      {/* MODAL THANH TOÁN */}
       {showPaymentModal && (
         <div className="modal-overlay">
           <div className="modal-content payment-modal">
-            {/* Header */}
             <div className="payment-modal-header">
               <h3>💵 Thanh Toán - {selectedTable}</h3>
               <button
@@ -681,7 +691,6 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
               </button>
             </div>
 
-            {/* Thông tin đơn hàng & Khách hàng */}
             <div className="payment-summary-box">
               <div>
                 <div className="summary-meta-label">
@@ -693,7 +702,8 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
                   </span>
                 </div>
                 <div className="summary-meta-label">
-                  Số lượng món: <strong>{cart.reduce((s, i) => s + i.quantity, 0)}</strong>
+                  Số lượng món:{" "}
+                  <strong>{cart.reduce((s, i) => s + i.quantity, 0)}</strong>
                 </div>
               </div>
               <div className="summary-amount-wrapper">
@@ -704,35 +714,42 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
               </div>
             </div>
 
-            {/* Phương thức thanh toán */}
             <div className="payment-tabs">
               <button
-                className={`payment-tab-btn ${paymentMethod === "CASH" ? "active" : ""}`}
+                className={`payment-tab-btn ${
+                  paymentMethod === "CASH" ? "active" : ""
+                }`}
                 onClick={() => setPaymentMethod("CASH")}
               >
                 💵 Tiền Mặt
               </button>
               <button
-                className={`payment-tab-btn ${paymentMethod === "TRANSFER" ? "active" : ""}`}
+                className={`payment-tab-btn ${
+                  paymentMethod === "TRANSFER" ? "active" : ""
+                }`}
                 onClick={() => setPaymentMethod("TRANSFER")}
               >
                 📲 Chuyển Khoản QR
               </button>
             </div>
 
-            {/* NỘI DUNG THANH TOÁN TIỀN MẶT */}
             {paymentMethod === "CASH" && (
               <div className="cash-input-section">
                 <div className="cash-label">
-                  <span>Tiền khách đưa:</span>
+                  <span>Tiền khách đưa</span>
                   {customerCash ? (
-                    <span style={{ fontSize: "12px", color: "#666", fontWeight: "normal" }}>
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        color: "#666",
+                        fontWeight: "normal",
+                      }}
+                    >
                       ({Number(customerCash).toLocaleString("vi-VN")} VNĐ)
                     </span>
                   ) : null}
                 </div>
 
-                {/* Ô nhập tiền khách đưa */}
                 <div className="cash-input-wrapper">
                   <input
                     type="text"
@@ -759,11 +776,9 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
                   <span className="cash-currency-badge">VNĐ</span>
                 </div>
 
-                {/* Hàng nút gợi ý tiền nhanh */}
                 <div className="quick-cash-container">
-                  <span className="quick-cash-title">Gợi ý mệnh giá nhanh:</span>
+                  <span className="quick-cash-title">Gợi ý mệnh giá nhanh</span>
                   <div className="quick-cash-grid">
-                    {/* Nút trả đúng số tiền */}
                     <button
                       type="button"
                       className="quick-cash-btn exact-btn"
@@ -772,7 +787,6 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
                       Đủ tiền ({totalAmount.toLocaleString("vi-VN")})
                     </button>
 
-                    {/* Các mệnh giá tiền mặt phổ biến */}
                     {[50000, 100000, 200000, 500000].map((denom) => (
                       <button
                         key={denom}
@@ -784,7 +798,6 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
                       </button>
                     ))}
 
-                    {/* Nút cộng thêm nhanh */}
                     <button
                       type="button"
                       className="quick-cash-btn"
@@ -809,11 +822,12 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
                   </div>
                 </div>
 
-                {/* HỘP TÍNH TIỀN THỐI LẠI (TỰ ĐỘNG THEO THỜI GIAN THỰC) */}
                 {customerCash === "" || customerCash === 0 ? (
                   <div className="change-box empty">
                     <div className="change-label-group">
-                      <div className="change-label">Chưa nhập tiền khách đưa</div>
+                      <div className="change-label">
+                        Chưa nhập tiền khách đưa
+                      </div>
                       <div className="change-subtext">
                         Nhập số tiền hoặc bấm mệnh giá gợi ý phía trên
                       </div>
@@ -823,9 +837,12 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
                 ) : isCashEnough ? (
                   <div className="change-box success">
                     <div className="change-label-group">
-                      <div className="change-label">✨ TIỀN THỐI LẠI CHO KHÁCH:</div>
+                      <div className="change-label">
+                        ✨ TIỀN THỐI LẠI CHO KHÁCH
+                      </div>
                       <div className="change-subtext">
-                        Đã nhận đủ {numericCustomerCash.toLocaleString("vi-VN")} đ
+                        Đã nhận đủ {numericCustomerCash.toLocaleString("vi-VN")}{" "}
+                        đ
                       </div>
                     </div>
                     <div className="change-value">
@@ -835,8 +852,10 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
                 ) : (
                   <div className="change-box warning">
                     <div className="change-label-group">
-                      <div className="change-label">⚠️ Khách đưa chưa đủ tiền!</div>
-                      <div className="change-subtext">Còn thiếu:</div>
+                      <div className="change-label">
+                        ⚠️ Khách đưa chưa đủ tiền!
+                      </div>
+                      <div className="change-subtext">Còn thiếu</div>
                     </div>
                     <div className="change-value">
                       {Math.abs(changeAmount).toLocaleString("vi-VN")} đ
@@ -846,11 +865,10 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
               </div>
             )}
 
-            {/* NỘI DUNG CHUYỂN KHOẢN QR */}
             {paymentMethod === "TRANSFER" && (
               <div className="qr-transfer-section">
                 <p className="qr-note">
-                  Quét mã QR để thanh toán chính xác:{" "}
+                  Quét mã QR để thanh toán chính xác{" "}
                   <strong>{totalAmount.toLocaleString("vi-VN")} đ</strong>
                 </p>
                 <img
@@ -858,13 +876,15 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
                   alt="QR Code Thanh Toán"
                   className="qr-code-img"
                 />
-                <p className="qr-note" style={{ fontSize: "12px", color: "#888" }}>
+                <p
+                  className="qr-note"
+                  style={{ fontSize: "12px", color: "#888" }}
+                >
                   Hệ thống tự động ghi nhận khi chuyển khoản thành công.
                 </p>
               </div>
             )}
 
-            {/* Nút hành động Modal */}
             <div className="payment-actions">
               <button
                 type="button"
@@ -886,29 +906,30 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
         </div>
       )}
 
-      {/* ==========================================================
-          MODAL HÓA ĐƠN / BIÊN LAI THÀNH CÔNG
-          ========================================================== */}
+      {/* MODAL HÓA ĐƠN BIÊN LAI */}
       {showReceiptModal && lastReceipt && (
         <div className="modal-overlay">
           <div className="modal-content receipt-modal">
             <div className="receipt-icon-success">✓</div>
             <h3 className="receipt-title">Thanh Toán Thành Công!</h3>
-            <p style={{ fontSize: "13px", color: "#666", margin: "0 0 12px 0" }}>
-              Đơn hàng tại <strong>{lastReceipt.table}</strong> đã được hoàn tất.
+            <p
+              style={{ fontSize: "13px", color: "#666", margin: "0 0 12px 0" }}
+            >
+              Đơn hàng tại <strong>{lastReceipt.table}</strong> đã được hoàn
+              tất.
             </p>
 
             <div className="receipt-details-card">
               <div className="receipt-row">
-                <span>Mã hóa đơn:</span>
+                <span>Mã hóa đơn</span>
                 <strong>{lastReceipt.orderId}</strong>
               </div>
               <div className="receipt-row">
-                <span>Thời gian:</span>
+                <span>Thời gian</span>
                 <span>{lastReceipt.createdAt}</span>
               </div>
               <div className="receipt-row">
-                <span>Khách hàng:</span>
+                <span>Khách hàng</span>
                 <span>
                   {lastReceipt.customer
                     ? `${lastReceipt.customer.name}`
@@ -916,7 +937,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
                 </span>
               </div>
               <div className="receipt-row">
-                <span>Hình thức:</span>
+                <span>Hình thức</span>
                 <span>
                   {lastReceipt.paymentMethod === "CASH"
                     ? "Tiền mặt"
@@ -925,7 +946,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
               </div>
 
               <div className="receipt-row highlight">
-                <span>Tổng cộng:</span>
+                <span>Tổng cộng</span>
                 <span style={{ color: "#d63031" }}>
                   {lastReceipt.totalAmount.toLocaleString("vi-VN")} đ
                 </span>
@@ -934,13 +955,13 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
               {lastReceipt.paymentMethod === "CASH" && (
                 <>
                   <div className="receipt-row">
-                    <span>Tiền khách đưa:</span>
+                    <span>Tiền khách đưa</span>
                     <span>
                       {lastReceipt.customerCash.toLocaleString("vi-VN")} đ
                     </span>
                   </div>
                   <div className="receipt-row change-highlight">
-                    <span>Tiền thối lại:</span>
+                    <span>Tiền thối lại</span>
                     <span>
                       {lastReceipt.changeAmount.toLocaleString("vi-VN")} đ
                     </span>
