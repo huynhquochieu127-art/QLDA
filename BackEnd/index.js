@@ -1,10 +1,27 @@
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
+const http = require("http");           // Cần để Socket.IO gắn vào
+const { Server } = require("socket.io"); // Socket.IO
 const cors = require("cors");
 const mysql = require("mysql2/promise");
 
 const app = express();
+const httpServer = http.createServer(app); // Tạo HTTP Server từ Express
+
+// ── Cấu hình Socket.IO ────────────────────────────────────────────────────────
+const io = new Server(httpServer, {
+  cors: { origin: "*", methods: ["GET", "POST", "PUT", "DELETE"] },
+});
+
+io.on("connection", (socket) => {
+  console.log(`🔌 Client kết nối: ${socket.id}`);
+  socket.on("disconnect", () => {
+    console.log(`❌ Client ngắt kết nối: ${socket.id}`);
+  });
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 app.use(cors());
 app.use(express.json());
 
@@ -13,12 +30,11 @@ const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_key";
 const jwt = require("jsonwebtoken");
 
 // Kết nối MySQL Database
-console.log("DB_PASSWORD from env is:", process.env.DB_PASSWORD);
 const db = mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "12345", // Hardcode 12345 để dự phòng nếu .env lỗi
-  database: process.env.DB_NAME || "dacnpm", // Hardcode dacnpm để dự phòng
+  password: process.env.DB_PASSWORD || "12345",
+  database: process.env.DB_NAME || "dacnpm",
   waitForConnections: true,
   connectionLimit: 10,
 });
@@ -553,7 +569,120 @@ app.get("/api/orders/:id", async (req, res) => {
   }
 });
 
+// ==========================================
+// 6. API KHU VỰC & BÀN (REALTIME)
+// ==========================================
+
+// [GET] Lấy tất cả khu vực + danh sách bàn trong đó
+app.get("/api/areas", async (req, res) => {
+  try {
+    const [areas] = await db.query("SELECT * FROM khuvuc ORDER BY MaKhuVuc ASC");
+    const [tables] = await db.query(`
+      SELECT b.*, k.TenKhuVuc
+      FROM bancafe b
+      LEFT JOIN khuvuc k ON b.MaKhuVuc = k.MaKhuVuc
+      ORDER BY b.MaKhuVuc, b.MaBan
+    `);
+    // Gộp bàn vào từng khu vực
+    const result = areas.map((area) => ({
+      ...area,
+      tables: tables.filter((t) => t.MaKhuVuc === area.MaKhuVuc),
+    }));
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [GET] Lấy danh sách tất cả bàn (phẳng)
+app.get("/api/tables", async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT b.*, k.TenKhuVuc
+      FROM bancafe b
+      LEFT JOIN khuvuc k ON b.MaKhuVuc = k.MaKhuVuc
+      ORDER BY b.MaKhuVuc, b.MaBan
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [PATCH] Cập nhật trạng thái bàn + Emit Realtime
+// Body: { trangThai: 'TRONG' | 'CO_KHACH' | 'DAT_TRUOC' }
+app.patch("/api/tables/:id/status", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { trangThai } = req.body;
+    const validStatuses = ["TRONG", "CO_KHACH", "DAT_TRUOC"];
+    if (!validStatuses.includes(trangThai)) {
+      return res.status(400).json({ message: "Trạng thái không hợp lệ!" });
+    }
+
+    await db.query(
+      "UPDATE bancafe SET TrangThai = ? WHERE MaBan = ?",
+      [trangThai, id]
+    );
+
+    const [[table]] = await db.query(
+      `SELECT b.*, k.TenKhuVuc FROM bancafe b
+       LEFT JOIN khuvuc k ON b.MaKhuVuc = k.MaKhuVuc
+       WHERE b.MaBan = ?`,
+      [id]
+    );
+
+    // 🔴 EMIT REALTIME đến tất cả client đang kết nối
+    io.emit("table:statusChanged", {
+      maBan: table.MaBan,
+      tenBan: table.TenBan,
+      trangThai: table.TrangThai,
+      maKhuVuc: table.MaKhuVuc,
+      tenKhuVuc: table.TenKhuVuc,
+    });
+
+    res.json({ success: true, message: `Cập nhật ${table.TenBan} -> ${trangThai}`, table });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [POST] Thêm bàn mới
+app.post("/api/tables", async (req, res) => {
+  try {
+    const { tenBan, soChoNgoi, maKhuVuc } = req.body;
+    if (!tenBan) return res.status(400).json({ message: "Vui lòng nhập tên bàn!" });
+    const [result] = await db.query(
+      "INSERT INTO bancafe (TenBan, SoChoNgoi, MaKhuVuc, TrangThai) VALUES (?, ?, ?, 'TRONG')",
+      [tenBan, soChoNgoi || 4, maKhuVuc || 1]
+    );
+    // Emit thêm bàn mới cho tất cả client
+    io.emit("table:added", { maBan: result.insertId, tenBan, trangThai: "TRONG" });
+    res.status(201).json({ message: "Thêm bàn thành công!", id: result.insertId });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [DELETE] Xóa bàn
+app.delete("/api/tables/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Kiểm tra bàn đang có khách không
+    const [[table]] = await db.query("SELECT * FROM bancafe WHERE MaBan = ?", [id]);
+    if (!table) return res.status(404).json({ message: "Không tìm thấy bàn!" });
+    if (table.TrangThai === "CO_KHACH") {
+      return res.status(400).json({ message: "Không thể xóa bàn đang có khách!" });
+    }
+    await db.query("DELETE FROM bancafe WHERE MaBan = ?", [id]);
+    io.emit("table:deleted", { maBan: parseInt(id) });
+    res.json({ message: "Xóa bàn thành công!" });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server BackEnd đang chạy tại: http://localhost:${PORT}`);
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Server BackEnd + Socket.IO đang chạy tại: http://localhost:${PORT}`);
 });

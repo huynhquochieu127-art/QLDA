@@ -5,7 +5,8 @@
     "lucide-react": "^1.48.0",
     "react-bootstrap": "^2.10.10",
     "react-router-dom": "^7.18.4",
-    "react-scripts": "^5.0.1"
+    "react-scripts": "^5.0.1",
+    "socket.io-client": "^4.8.4"
   },
   "scripts": {
     "dev": "vite",
