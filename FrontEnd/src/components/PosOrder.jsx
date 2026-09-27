@@ -229,19 +229,33 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
     });
   };
 
-  // Cập nhật số lượng
+  // Cập nhật số lượng (tăng / giảm theo delta) (QH-75)
   const updateQuantity = (id, delta) => {
     setCart((prevCart) =>
       prevCart
         .map((item) => {
           if (item.id === id) {
             const newQty = item.quantity + delta;
-            return newQty > 0 ? { ...item, quantity: newQty } : null;
+            return newQty > 0 ? { ...item, quantity: Math.min(newQty, 99) } : null;
           }
           return item;
         })
         .filter(Boolean),
     );
+  };
+
+  // Chỉnh sửa số lượng trực tiếp bằng bàn phím (QH-75)
+  const handleDirectQuantityChange = (id, newQty) => {
+    const parsed = parseInt(newQty, 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      removeFromCart(id);
+    } else {
+      setCart((prevCart) =>
+        prevCart.map((item) =>
+          item.id === id ? { ...item, quantity: Math.min(parsed, 99) } : item,
+        ),
+      );
+    }
   };
 
   // Xóa sản phẩm khỏi giỏ
@@ -498,11 +512,35 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
                   </span>
                 </div>
                 <div className="cart-item-controls">
-                  <button onClick={() => updateQuantity(item.id, -1)}>-</button>
-                  <span>{item.quantity}</span>
-                  <button onClick={() => updateQuantity(item.id, 1)}>+</button>
                   <button
+                    type="button"
+                    title="Giảm số lượng"
+                    onClick={() => updateQuantity(item.id, -1)}
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    className="cart-qty-input"
+                    value={item.quantity}
+                    onChange={(e) =>
+                      handleDirectQuantityChange(item.id, e.target.value)
+                    }
+                    title="Bấm để chỉnh sửa số lượng trực tiếp"
+                  />
+                  <button
+                    type="button"
+                    title="Tăng số lượng"
+                    onClick={() => updateQuantity(item.id, 1)}
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
                     className="delete-btn"
+                    title="Xóa món khỏi giỏ"
                     onClick={() => removeFromCart(item.id)}
                   >
                     ×
