@@ -6,6 +6,7 @@ import TableManagement from "../components/TableManagement";
 import CategoryManagement from "../components/CategoryManagement";
 import ProductManagement from "../components/ProductManagement";
 import OrderManagement from "../components/OrderManagement";
+import EmployeeManagement from "../components/EmployeeManagement";
 import {
   Clock,
   User,
@@ -765,13 +766,19 @@ export default function Home() {
             </div>
           )}
 
+          {/* TAB QUẢN LÝ NHÂN SỰ & PHÂN QUYỀN */}
+          {activeTab === "hr" && (
+            <EmployeeManagement currentRole={currentRole} />
+          )}
+
           {/* TAB PLACEHOLDER DÀNH CHO CÁC PHÂN HỆ KHÁC */}
           {activeTab !== "pos" &&
             activeTab !== "orders" &&
             activeTab !== "customers" &&
             activeTab !== "categories" &&
             activeTab !== "inventory" &&
-            activeTab !== "tables" && (
+            activeTab !== "tables" &&
+            activeTab !== "hr" && (
               <div className="tab-placeholder">
                 <Coffee size={28} className="placeholder-icon" />
                 <h2>
