@@ -563,6 +563,209 @@ app.delete("/api/products/:id", async (req, res) => {
   }
 });
 
+// ==========================================
+// 6. API QUẢN LÝ NHÂN SỰ (EMPLOYEES - QH-17, QH-19)
+// ==========================================
+
+// Tự động kiểm tra/tạo bảng nhanvien nếu chưa có trong MySQL
+const initEmployeeTable = async () => {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS nhanvien (
+        MaNhanVien INT AUTO_INCREMENT PRIMARY KEY,
+        HoTen VARCHAR(100) NOT NULL,
+        SoDienThoai VARCHAR(20) NOT NULL UNIQUE,
+        CCCD VARCHAR(20) NOT NULL,
+        Email VARCHAR(100),
+        VaiTro VARCHAR(50) DEFAULT 'cashier',
+        TrangThai VARCHAR(20) DEFAULT 'active',
+        MatKhau VARCHAR(255) DEFAULT '123456',
+        GhiChu TEXT,
+        NgayTao DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (err) {
+    console.warn("Chưa thể khởi tạo bảng nhanvien (MySQL có thể chưa kết nối):", err.message);
+  }
+};
+initEmployeeTable();
+
+// [GET] Lấy danh sách nhân sự (Hỗ trợ Tìm kiếm, Lọc vai trò/trạng thái, Phân trang)
+app.get("/api/employees", async (req, res) => {
+  try {
+    const search = req.query.search || "";
+    const role = req.query.role || "all";
+    const status = req.query.status || "all";
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    let whereClauses = ["(HoTen LIKE ? OR SoDienThoai LIKE ? OR CCCD LIKE ? OR Email LIKE ?)"];
+    let params = [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`];
+
+    if (role !== "all") {
+      whereClauses.push("VaiTro = ?");
+      params.push(role);
+    }
+
+    if (status !== "all") {
+      whereClauses.push("TrangThai = ?");
+      params.push(status);
+    }
+
+    const whereSQL = whereClauses.join(" AND ");
+
+    const [countResult] = await db.query(
+      `SELECT COUNT(*) as total FROM nhanvien WHERE ${whereSQL}`,
+      params
+    );
+
+    const [rows] = await db.query(
+      `SELECT 
+        MaNhanVien AS id,
+        HoTen AS fullName,
+        SoDienThoai AS phone,
+        CCCD AS cccd,
+        Email AS email,
+        VaiTro AS role,
+        TrangThai AS status,
+        GhiChu AS note,
+        DATE_FORMAT(NgayTao, '%d/%m/%Y') AS createdAt
+       FROM nhanvien 
+       WHERE ${whereSQL}
+       ORDER BY MaNhanVien DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    const roleMap = {
+      admin: "Quản trị viên (Admin)",
+      manager: "Quản lý cửa hàng",
+      cashier: "Thu ngân (POS)",
+      barista: "Pha chế (Barista)",
+    };
+
+    const statusMap = {
+      active: "Đang làm việc",
+      probation: "Thử việc",
+      inactive: "Tạm nghỉ",
+    };
+
+    const formattedData = rows.map((emp) => ({
+      ...emp,
+      id: `NV${String(emp.id).padStart(3, "0")}`,
+      roleName: roleMap[emp.role] || "Nhân viên",
+      statusName: statusMap[emp.status] || "Đang làm việc",
+    }));
+
+    res.json({
+      success: true,
+      data: formattedData,
+      total: countResult[0]?.total || 0,
+      totalPages: Math.ceil((countResult[0]?.total || 0) / limit) || 1,
+      currentPage: page,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Lỗi truy vấn MySQL: " + err.message });
+  }
+});
+
+// [GET] Chi tiết nhân viên
+app.get("/api/employees/:id", async (req, res) => {
+  try {
+    const rawId = req.params.id.replace("NV", "");
+    const [rows] = await db.query(
+      "SELECT MaNhanVien as id, HoTen as fullName, SoDienThoai as phone, CCCD as cccd, Email as email, VaiTro as role, TrangThai as status, GhiChu as note, DATE_FORMAT(NgayTao, '%d/%m/%Y') as createdAt FROM nhanvien WHERE MaNhanVien = ?",
+      [rawId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy nhân viên!" });
+    }
+
+    res.json({ success: true, data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [POST] Thêm mới nhân viên vào MySQL
+app.post("/api/employees", async (req, res) => {
+  try {
+    const { fullName, phone, cccd, email, role, status, note, password } = req.body;
+
+    if (!fullName || !phone || !cccd) {
+      return res.status(400).json({ success: false, message: "Vui lòng nhập đủ Họ tên, SĐT và CCCD!" });
+    }
+
+    const [result] = await db.query(
+      `INSERT INTO nhanvien (HoTen, SoDienThoai, CCCD, Email, VaiTro, TrangThai, MatKhau, GhiChu) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        fullName.trim(),
+        phone.trim(),
+        cccd.trim(),
+        email ? email.trim() : null,
+        role || "cashier",
+        status || "active",
+        password || "123456",
+        note ? note.trim() : null,
+      ]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Thêm nhân viên thành công!",
+      id: `NV${String(result.insertId).padStart(3, "0")}`,
+    });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY" || err.errno === 1062) {
+      return res.status(400).json({ success: false, message: "Số điện thoại này đã được đăng ký!" });
+    }
+    res.status(500).json({ success: false, message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [PATCH] Cập nhật trạng thái nhân viên (Khóa / Mở khóa)
+app.patch("/api/employees/:id/status", async (req, res) => {
+  try {
+    const rawId = req.params.id.replace("NV", "");
+    const { status } = req.body;
+
+    const [result] = await db.query(
+      "UPDATE nhanvien SET TrangThai = ? WHERE MaNhanVien = ?",
+      [status, rawId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy nhân viên!" });
+    }
+
+    res.json({ success: true, message: "Cập nhật trạng thái thành công!" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [DELETE] Xóa nhân viên khỏi MySQL
+app.delete("/api/employees/:id", async (req, res) => {
+  try {
+    const rawId = req.params.id.replace("NV", "");
+    const [result] = await db.query(
+      "DELETE FROM nhanvien WHERE MaNhanVien = ?",
+      [rawId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy nhân viên!" });
+    }
+
+    res.json({ success: true, message: "Xóa nhân viên thành công!" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Lỗi MySQL: " + err.message });
+  }
+});
+
 const PORT = 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server BackEnd đang chạy tại: http://localhost:${PORT}`);

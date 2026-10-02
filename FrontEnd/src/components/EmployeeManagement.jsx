@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import axios from "axios";
 import {
   Users,
   UserPlus,
@@ -21,10 +22,17 @@ import {
   UserCheck,
   UserX,
   Coffee,
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpDown,
+  Download,
+  RotateCcw,
+  RefreshCw,
 } from "lucide-react";
 import "../../css/employee.css";
 
-// Dữ liệu nhân viên khởi tạo mẫu cho Demo Frontend
+// Dữ liệu nhân viên khởi tạo mẫu cho Demo Frontend & Fallback khi chưa có MySQL
 const INITIAL_EMPLOYEES = [
   {
     id: "NV001",
@@ -37,6 +45,7 @@ const INITIAL_EMPLOYEES = [
     status: "active",
     statusName: "Đang làm việc",
     createdAt: "15/01/2026",
+    note: "Quản lý toàn bộ hệ thống quán",
   },
   {
     id: "NV002",
@@ -49,6 +58,7 @@ const INITIAL_EMPLOYEES = [
     status: "active",
     statusName: "Đang làm việc",
     createdAt: "20/02/2026",
+    note: "Phụ trách ca sáng và kho nguyên liệu",
   },
   {
     id: "NV003",
@@ -61,6 +71,7 @@ const INITIAL_EMPLOYEES = [
     status: "active",
     statusName: "Đang làm việc",
     createdAt: "05/04/2026",
+    note: "Chuyên thu ngân quầy chính",
   },
   {
     id: "NV004",
@@ -73,11 +84,38 @@ const INITIAL_EMPLOYEES = [
     status: "probation",
     statusName: "Thử việc",
     createdAt: "12/09/2026",
+    note: "Học việc pha chế ca chiều",
+  },
+  {
+    id: "NV005",
+    fullName: "Vũ Hoàng Yến",
+    phone: "0934112233",
+    cccd: "025204001122",
+    email: "hoangyen@coffee.vn",
+    role: "cashier",
+    roleName: "Thu ngân (POS)",
+    status: "active",
+    statusName: "Đang làm việc",
+    createdAt: "18/08/2026",
+    note: "Ca tối thứ 2 đến thứ 6",
+  },
+  {
+    id: "NV006",
+    fullName: "Đỗ Đăng Khoa",
+    phone: "0908776655",
+    cccd: "001202003344",
+    email: "khoa.dd@gmail.com",
+    role: "barista",
+    roleName: "Pha chế (Barista)",
+    status: "inactive",
+    statusName: "Tạm nghỉ",
+    createdAt: "10/03/2026",
+    note: "Đang bảo lưu việc học",
   },
 ];
 
 export default function EmployeeManagement({ currentRole = "admin" }) {
-  // Lấy danh sách nhân viên từ localStorage để giữ lại dữ liệu khi F5
+  // Lấy danh sách nhân viên từ localStorage
   const [employees, setEmployees] = useState(() => {
     try {
       const saved = localStorage.getItem("app_mock_employees");
@@ -90,11 +128,20 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  // State Modal Thêm nhân viên
+  // Phân trang (Pagination)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
+
+  // Sắp xếp (Sorting)
+  const [sortField, setSortField] = useState("id");
+  const [sortOrder, setSortOrder] = useState("asc"); // 'asc' | 'desc'
+
+  // Modal State
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
+  const [viewingProfile, setViewingProfile] = useState(null); // Modal Xem chi tiết hồ sơ
 
-  // Form State
+  // Form State (Thêm nhân viên mới - QH-22)
   const initialFormState = {
     fullName: "",
     phone: "",
@@ -110,9 +157,30 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [successBanner, setSuccessBanner] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [isLoadingApi, setIsLoadingApi] = useState(false);
 
   const fullNameInputRef = useRef(null);
+
+  // Thử kết nối API Backend nếu có
+  const fetchEmployeesFromApi = async () => {
+    setIsLoadingApi(true);
+    try {
+      const res = await axios.get("http://localhost:5000/api/employees", {
+        timeout: 1000,
+      });
+      if (res.data?.success && res.data.data?.length > 0) {
+        setEmployees(res.data.data);
+      }
+    } catch (_) {
+      // Backend offline: dùng fallback localStorage
+    } finally {
+      setIsLoadingApi(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEmployeesFromApi();
+  }, []);
 
   // Lưu danh sách vào localStorage khi có thay đổi
   useEffect(() => {
@@ -129,7 +197,7 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
   }, [showAddModal]);
 
   // ========================================================
-  // VALIDATION LOGIC CHI TIẾT
+  // VALIDATION FORM LOGIC
   // ========================================================
   const validateField = (name, value, currentValues = formData) => {
     let error = "";
@@ -148,12 +216,10 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
           error = "Số điện thoại là bắt buộc (dùng làm Tên đăng nhập)!";
         } else {
           const cleanPhone = value.trim();
-          // Định dạng số điện thoại Việt Nam: 10 chữ số, bắt đầu bằng 0 (03, 05, 07, 08, 09, v.v.)
           const phoneRegex = /^(0[2|3|5|7|8|9])[0-9]{8}$/;
           if (!phoneRegex.test(cleanPhone)) {
             error = "Số điện thoại không hợp lệ (Phải gồm 10 chữ số, bắt đầu bằng số 0)!";
           } else {
-            // Kiểm tra trùng lặp SĐT trong danh sách nhân viên
             const isDuplicate = employees.some(
               (emp) =>
                 emp.phone === cleanPhone &&
@@ -171,7 +237,6 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
           error = "Căn cước công dân là trường bắt buộc!";
         } else {
           const cleanCccd = value.trim();
-          // CCCD Việt Nam gồm đúng 12 chữ số
           const cccdRegex = /^[0-9]{12}$/;
           if (!cccdRegex.test(cleanCccd)) {
             error = "Số CCCD phải gồm đúng 12 chữ số hợp lệ!";
@@ -180,7 +245,6 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
         break;
 
       case "email":
-        // Email là trường tùy chọn (Optional). Nếu có nhập thì phải đúng định dạng
         if (value && value.trim()) {
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           if (!emailRegex.test(value.trim())) {
@@ -200,7 +264,6 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
     const { name, value } = e.target;
     setFormData((prev) => {
       const next = { ...prev, [name]: value };
-      // Real-time validation nếu trường này đã từng được chạm vào (touched)
       if (touched[name]) {
         const fieldError = validateField(name, value, next);
         setErrors((prevErr) => ({ ...prevErr, [name]: fieldError }));
@@ -216,7 +279,6 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
     setErrors((prev) => ({ ...prev, [name]: fieldError }));
   };
 
-  // Validate toàn bộ form trước khi Submit
   const validateAll = () => {
     const newErrors = {};
     const fieldsToValidate = ["fullName", "phone", "cccd", "email"];
@@ -239,10 +301,8 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  // ========================================================
-  // XỬ LÝ LƯU / THÊM MỚI NHÂN VIÊN
-  // ========================================================
-  const handleSubmit = (e) => {
+  // Submit Thêm / Cập nhật nhân viên
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     const isValid = validateAll();
@@ -262,7 +322,7 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
     };
 
     if (editingEmployee) {
-      // Cập nhật nhân viên cũ
+      // Cập nhật nhân viên
       const updatedList = employees.map((emp) =>
         emp.id === editingEmployee.id
           ? {
@@ -282,12 +342,12 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
       setEmployees(updatedList);
       setSuccessBanner(`Đã cập nhật thông tin nhân viên "${formData.fullName}" thành công!`);
     } else {
-      // Thêm nhân viên mới
+      // Thêm mới nhân viên
       const newIdNumber = employees.length + 1;
       const newEmployee = {
         id: `NV${String(newIdNumber).padStart(3, "0")}`,
         fullName: formData.fullName.trim(),
-        phone: formData.phone.trim(), // SĐT làm Username
+        phone: formData.phone.trim(),
         cccd: formData.cccd.trim(),
         email: formData.email.trim(),
         role: formData.role,
@@ -304,7 +364,6 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
       );
     }
 
-    // Đóng Modal và Reset form
     handleCloseModal();
   };
 
@@ -341,13 +400,7 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
     setTouched({});
   };
 
-  const handleDelete = (id, name) => {
-    if (window.confirm(`Bạn có chắc muốn xóa nhân viên "${name}" (Mã: ${id})?`)) {
-      setEmployees(employees.filter((emp) => emp.id !== id));
-      setSuccessBanner(`Đã xóa nhân viên "${name}" khỏi hệ thống.`);
-    }
-  };
-
+  // Đổi trạng thái (Khóa / Mở khóa)
   const handleToggleStatus = (id) => {
     setEmployees(
       employees.map((emp) => {
@@ -364,33 +417,101 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
     );
   };
 
-  // ========================================================
-  // TÌM KIẾM VÀ LỌC DỮ LIỆU
-  // ========================================================
-  const filteredEmployees = employees.filter((emp) => {
-    const matchSearch =
-      emp.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.phone.includes(searchTerm) ||
-      emp.cccd.includes(searchTerm) ||
-      (emp.email && emp.email.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Cấp lại mật khẩu mặc định
+  const handleResetPassword = (emp) => {
+    if (
+      window.confirm(
+        `Cấp lại mật khẩu mặc định (Password@123) cho nhân viên "${emp.fullName}" (Tên đăng nhập: ${emp.phone})?`
+      )
+    ) {
+      setSuccessBanner(
+        `Đã đặt lại mật khẩu mặc định "Password@123" cho tài khoản ${emp.phone}.`
+      );
+    }
+  };
 
-    const matchRole = roleFilter === "all" || emp.role === roleFilter;
-    const matchStatus = statusFilter === "all" || emp.status === statusFilter;
+  // Xóa nhân viên
+  const handleDelete = (id, name) => {
+    if (window.confirm(`Bạn có chắc chắn muốn xóa nhân viên "${name}" (Mã: ${id}) khỏi hệ thống?`)) {
+      setEmployees(employees.filter((emp) => emp.id !== id));
+      setSuccessBanner(`Đã xóa nhân viên "${name}" khỏi danh sách.`);
+    }
+  };
 
-    return matchSearch && matchRole && matchStatus;
-  });
+  // Xuất file CSV
+  const handleExportCSV = () => {
+    const headers = ["Mã NV", "Họ và tên", "Số điện thoại (Username)", "CCCD", "Email", "Chức vụ", "Trạng thái", "Ngày tạo"];
+    const rows = employees.map((e) => [
+      e.id,
+      `"${e.fullName}"`,
+      `"${e.phone}"`,
+      `"${e.cccd}"`,
+      `"${e.email || ''}"`,
+      `"${e.roleName}"`,
+      `"${e.statusName}"`,
+      `"${e.createdAt}"`,
+    ]);
 
-  // Đếm thống kê
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Danh_sach_nhan_su_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Sắp xếp dữ liệu
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
+
+  // Lọc và Tìm kiếm danh sách
+  const filteredEmployees = employees
+    .filter((emp) => {
+      const matchSearch =
+        emp.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.phone.includes(searchTerm) ||
+        emp.cccd.includes(searchTerm) ||
+        (emp.email && emp.email.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      const matchRole = roleFilter === "all" || emp.role === roleFilter;
+      const matchStatus = statusFilter === "all" || emp.status === statusFilter;
+
+      return matchSearch && matchRole && matchStatus;
+    })
+    .sort((a, b) => {
+      let valA = a[sortField] || "";
+      let valB = b[sortField] || "";
+      if (typeof valA === "string") valA = valA.toLowerCase();
+      if (typeof valB === "string") valB = valB.toLowerCase();
+
+      if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+      if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+
+  // Phân trang
+  const totalItems = filteredEmployees.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const displayedEmployees = filteredEmployees.slice(startIndex, startIndex + itemsPerPage);
+
+  // Thống kê nhanh
   const totalCount = employees.length;
   const activeCount = employees.filter((e) => e.status === "active").length;
   const cashierCount = employees.filter((e) => e.role === "cashier").length;
-  const managerCount = employees.filter(
-    (e) => e.role === "manager" || e.role === "admin"
-  ).length;
+  const managerCount = employees.filter((e) => e.role === "manager" || e.role === "admin").length;
 
   return (
     <div className="employee-container">
-      {/* Banner thông báo thành công */}
+      {/* Banner thông báo */}
       {successBanner && (
         <div className="form-banner-success">
           <CheckCircle2 size={18} />
@@ -405,7 +526,7 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
         </div>
       )}
 
-      {/* Thống kê nhanh */}
+      {/* THỐNG KÊ NHANH (KPI CARDS) */}
       <div className="employee-stats-grid">
         <div className="employee-stat-card">
           <div className="employee-stat-info">
@@ -448,15 +569,18 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
         </div>
       </div>
 
-      {/* Thanh công cụ: Tìm kiếm, Bộ lọc & Nút Thêm mới */}
+      {/* THANH CÔNG CỤ: TÌM KIẾM, LỌC, XUẤT CSV, THÊM MỚI */}
       <div className="employee-toolbar">
         <div className="toolbar-search">
           <Search size={18} />
           <input
             type="text"
-            placeholder="Tìm theo Họ tên, SĐT (Tên đăng nhập), CCCD..."
+            placeholder="Tìm theo Họ tên, SĐT (Tên đăng nhập), CCCD, Email..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
           />
         </div>
 
@@ -464,9 +588,12 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
           <select
             className="filter-select"
             value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
+            onChange={(e) => {
+              setRoleFilter(e.target.value);
+              setCurrentPage(1);
+            }}
           >
-            <option value="all">Tất cả vai trò</option>
+            <option value="all">Tất cả chức vụ</option>
             <option value="admin">Quản trị viên (Admin)</option>
             <option value="manager">Quản lý cửa hàng</option>
             <option value="cashier">Thu ngân (POS)</option>
@@ -476,13 +603,21 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
           <select
             className="filter-select"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1);
+            }}
           >
             <option value="all">Tất cả trạng thái</option>
             <option value="active">Đang làm việc</option>
             <option value="probation">Thử việc</option>
             <option value="inactive">Tạm nghỉ</option>
           </select>
+
+          <button className="btn-export-csv" onClick={handleExportCSV} title="Xuất dữ liệu Excel">
+            <Download size={16} />
+            <span>Xuất Excel (CSV)</span>
+          </button>
 
           <button className="btn-primary-add" onClick={handleOpenAddModal}>
             <UserPlus size={18} />
@@ -491,30 +626,38 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
         </div>
       </div>
 
-      {/* Bảng danh sách nhân viên */}
+      {/* BẢNG QUẢN LÝ DANH SÁCH NHÂN SỰ (QH-17, QH-18) */}
       <div className="employee-table-wrapper">
         <table className="employee-table">
           <thead>
             <tr>
-              <th>Mã NV</th>
-              <th>Nhân viên</th>
+              <th className="sortable-th" onClick={() => handleSort("id")}>
+                <div className="th-content">
+                  Mã NV <ArrowUpDown size={13} />
+                </div>
+              </th>
+              <th className="sortable-th" onClick={() => handleSort("fullName")}>
+                <div className="th-content">
+                  Họ và tên nhân viên <ArrowUpDown size={13} />
+                </div>
+              </th>
               <th>SĐT (Tên đăng nhập)</th>
               <th>Căn cước công dân</th>
-              <th>Vai trò</th>
+              <th>Chức vụ / Vai trò</th>
               <th>Trạng thái</th>
-              <th style={{ textAlign: "right" }}>Hành động</th>
+              <th style={{ textAlign: "right" }}>Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            {filteredEmployees.length === 0 ? (
+            {displayedEmployees.length === 0 ? (
               <tr>
                 <td colSpan="7" style={{ textAlign: "center", padding: "40px", color: "#6b7280" }}>
                   <Users size={36} style={{ margin: "0 auto 10px", opacity: 0.4 }} />
-                  <p>Không tìm thấy nhân viên nào phù hợp với bộ lọc!</p>
+                  <p>Không tìm thấy nhân viên nào phù hợp với điều kiện tìm kiếm!</p>
                 </td>
               </tr>
             ) : (
-              filteredEmployees.map((emp) => (
+              displayedEmployees.map((emp) => (
                 <tr key={emp.id}>
                   <td>
                     <strong style={{ color: "#2563eb", fontFamily: "monospace" }}>
@@ -527,7 +670,14 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
                         {emp.fullName.charAt(0).toUpperCase()}
                       </div>
                       <div className="emp-details">
-                        <span className="emp-name">{emp.fullName}</span>
+                        <span
+                          className="emp-name"
+                          style={{ cursor: "pointer", color: "#0f172a" }}
+                          onClick={() => setViewingProfile(emp)}
+                          title="Xem chi tiết hồ sơ"
+                        >
+                          {emp.fullName}
+                        </span>
                         <span className="emp-email">
                           {emp.email ? emp.email : <em style={{ color: "#9ca3af" }}>Chưa có email</em>}
                         </span>
@@ -535,7 +685,7 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
                     </div>
                   </td>
                   <td>
-                    <span className="login-tag" title="Tài khoản đăng nhập">
+                    <span className="login-tag" title="Tài khoản đăng nhập POS">
                       <Phone size={12} />
                       {emp.phone}
                     </span>
@@ -556,13 +706,38 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
                   </td>
                   <td>
                     <div className="emp-actions" style={{ justifyContent: "flex-end" }}>
+                      {/* Xem chi tiết */}
                       <button
                         className="btn-icon-action"
-                        title={emp.status === "active" ? "Khóa tài khoản" : "Kích hoạt"}
+                        title="Xem chi tiết hồ sơ"
+                        onClick={() => setViewingProfile(emp)}
+                      >
+                        <Eye size={15} color="#2563eb" />
+                      </button>
+
+                      {/* Khóa / Kích hoạt tài khoản */}
+                      <button
+                        className="btn-icon-action"
+                        title={emp.status === "active" ? "Khóa tài khoản" : "Mở khóa tài khoản"}
                         onClick={() => handleToggleStatus(emp.id)}
                       >
-                        {emp.status === "active" ? <Unlock size={15} color="#16a34a" /> : <Lock size={15} color="#dc2626" />}
+                        {emp.status === "active" ? (
+                          <Unlock size={15} color="#16a34a" />
+                        ) : (
+                          <Lock size={15} color="#dc2626" />
+                        )}
                       </button>
+
+                      {/* Đặt lại mật khẩu */}
+                      <button
+                        className="btn-icon-action"
+                        title="Cấp lại mật khẩu mặc định"
+                        onClick={() => handleResetPassword(emp)}
+                      >
+                        <RotateCcw size={15} color="#d97706" />
+                      </button>
+
+                      {/* Chỉnh sửa */}
                       <button
                         className="btn-icon-action"
                         title="Chỉnh sửa thông tin"
@@ -570,6 +745,8 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
                       >
                         <Edit2 size={15} />
                       </button>
+
+                      {/* Xóa */}
                       <button
                         className="btn-icon-action delete"
                         title="Xóa nhân viên"
@@ -584,10 +761,167 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
             )}
           </tbody>
         </table>
+
+        {/* THANH PHÂN TRANG (PAGINATION - QH-20) */}
+        <div className="emp-pagination-bar">
+          <div className="emp-pagination-info">
+            Hiển thị{" "}
+            <strong>
+              {totalItems === 0 ? 0 : startIndex + 1} -{" "}
+              {Math.min(startIndex + itemsPerPage, totalItems)}
+            </strong>{" "}
+            trong tổng số <strong>{totalItems}</strong> nhân viên
+          </div>
+
+          <div className="emp-pagination-controls">
+            <span style={{ fontSize: 13, color: "#64748b", marginRight: 6 }}>Số hàng:</span>
+            <select
+              className="emp-per-page-select"
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+            >
+              <option value={5}>5 hàng</option>
+              <option value={10}>10 hàng</option>
+              <option value={20}>20 hàng</option>
+            </select>
+
+            <button
+              className="emp-page-btn"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              title="Trang trước"
+            >
+              <ChevronLeft size={16} />
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                className={`emp-page-btn ${currentPage === page ? "active" : ""}`}
+                onClick={() => setCurrentPage(page)}
+              >
+                {page}
+              </button>
+            ))}
+
+            <button
+              className="emp-page-btn"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              title="Trang tiếp"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* ========================================================
-          MODAL FORM THÊM / SỬA NHÂN VIÊN MỚI
+          MODAL XEM CHI TIẾT HỒ SƠ NHÂN VIÊN (PROFILE MODAL)
+          ======================================================== */}
+      {viewingProfile && (
+        <div className="emp-modal-overlay" onClick={() => setViewingProfile(null)}>
+          <div
+            className="emp-modal-content profile-modal-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="profile-top-banner">
+              <div className="profile-avatar-large">
+                {viewingProfile.fullName.charAt(0).toUpperCase()}
+              </div>
+              <div className="profile-title-text">
+                <h3>{viewingProfile.fullName}</h3>
+                <span className="profile-id-badge">Mã NV: {viewingProfile.id}</span>
+              </div>
+              <button
+                className="emp-modal-close"
+                style={{ marginLeft: "auto", color: "#ffffff" }}
+                onClick={() => setViewingProfile(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="profile-info-grid">
+              <div className="profile-info-item">
+                <span className="profile-info-label">Số điện thoại (Username)</span>
+                <span className="profile-info-value phone">{viewingProfile.phone}</span>
+              </div>
+
+              <div className="profile-info-item">
+                <span className="profile-info-label">Căn cước công dân (CCCD)</span>
+                <span className="profile-info-value mono">{viewingProfile.cccd}</span>
+              </div>
+
+              <div className="profile-info-item">
+                <span className="profile-info-label">Email liên hệ</span>
+                <span className="profile-info-value">
+                  {viewingProfile.email || "Chưa cập nhật email"}
+                </span>
+              </div>
+
+              <div className="profile-info-item">
+                <span className="profile-info-label">Chức vụ & Quyền hạn</span>
+                <span className="profile-info-value">
+                  <span className={`badge-role ${viewingProfile.role}`}>
+                    {viewingProfile.roleName}
+                  </span>
+                </span>
+              </div>
+
+              <div className="profile-info-item">
+                <span className="profile-info-label">Trạng thái hồ sơ</span>
+                <span className="profile-info-value">
+                  <span className={`badge-status ${viewingProfile.status}`}>
+                    <span className="badge-status-dot"></span>
+                    {viewingProfile.statusName}
+                  </span>
+                </span>
+              </div>
+
+              <div className="profile-info-item">
+                <span className="profile-info-label">Ngày tham gia hệ thống</span>
+                <span className="profile-info-value">{viewingProfile.createdAt || "Chưa xác định"}</span>
+              </div>
+
+              {viewingProfile.note && (
+                <div className="profile-info-item full-col">
+                  <span className="profile-info-label">Ghi chú quản lý</span>
+                  <div className="profile-note-box">{viewingProfile.note}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="emp-modal-footer">
+              <button
+                type="button"
+                className="btn-secondary-action"
+                onClick={() => setViewingProfile(null)}
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                className="btn-submit-save"
+                onClick={() => {
+                  const emp = viewingProfile;
+                  setViewingProfile(null);
+                  handleOpenEditModal(emp);
+                }}
+              >
+                <Edit2 size={15} />
+                <span>Chỉnh sửa hồ sơ</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL FORM THÊM / SỬA NHÂN VIÊN MỚI (QH-22)
           ======================================================== */}
       {showAddModal && (
         <div className="emp-modal-overlay" onClick={handleCloseModal}>
@@ -626,7 +960,7 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
             {/* Modal Form */}
             <form onSubmit={handleSubmit} noValidate>
               <div className="emp-modal-body">
-                {/* Banner cảnh báo lỗi tổng quát nếu có trường chưa hợp lệ */}
+                {/* Banner cảnh báo lỗi tổng quát */}
                 {Object.keys(errors).some((k) => errors[k]) && (
                   <div className="form-banner-error">
                     <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
@@ -768,7 +1102,7 @@ export default function EmployeeManagement({ currentRole = "admin" }) {
                   {/* VAI TRÒ / CHỨC VỤ */}
                   <div className="emp-form-group">
                     <label className="emp-form-label" htmlFor="role">
-                      <span>Vai trò & Phân quyền</span>
+                      <span>Chức vụ & Phân quyền</span>
                     </label>
                     <div className="emp-input-wrapper">
                       <Briefcase size={16} className="emp-input-icon" />
