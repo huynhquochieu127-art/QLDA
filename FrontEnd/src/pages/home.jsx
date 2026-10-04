@@ -796,30 +796,35 @@ export default function Home() {
               )}
             </div>
           )}
-{/* TAB QUẢN LÝ NHÂN SỰ & PHÂN QUYỀN */}
-      {activeTab === "hr" && (
-        <EmployeeManagement currentRole={currentRole} />
-      )}
+          {/* TAB QUẢN LÝ NHÂN SỰ & PHÂN QUYỀN */}
+          {activeTab === "hr" && (
+            <EmployeeManagement currentRole={currentRole} />
+          )}
 
-      {/* TAB DUYỆT CA LÀM & CHẤM CÔNG */}
-      {activeTab === "shifts_approval" && (
-        <ShiftApprovalManagement currentRole={currentRole} />
-      )}
+          {/* TAB DUYỆT CA LÀM & CHẤM CÔNG */}
+          {activeTab === "shifts_approval" && (
+            <ShiftApprovalManagement currentRole={currentRole} />
+          )}
 
-      {/* TAB PLACEHOLDER DÀNH CHO CÁC PHÂN HỆ KHÁC */}
-      {activeTab !== "pos" &&
-        activeTab !== "orders" &&
-        activeTab !== "customers" &&
-        activeTab !== "categories" &&
-        activeTab !== "inventory" &&
-        activeTab !== "tables" &&
-        activeTab !== "hr" &&
-        activeTab !== "shifts_approval" && (
-          <div className="tab-placeholder">
-            <Coffee size={28} className="placeholder-icon" />
-            <h2>
-              Phân hệ: {menuList.find((m) => m.id === activeTab)?.label}
-            </h2>
-            <p>Sẵn sàng kết nối MySQL cho phân hệ này.</p>
-          </div>
-        )}
+          {/* TAB PLACEHOLDER DÀNH CHO CÁC PHÂN HỆ KHÁC */}
+          {activeTab !== "pos" &&
+            activeTab !== "orders" &&
+            activeTab !== "customers" &&
+            activeTab !== "categories" &&
+            activeTab !== "inventory" &&
+            activeTab !== "tables" &&
+            activeTab !== "hr" &&
+            activeTab !== "shifts_approval" && (
+              <div className="tab-placeholder">
+                <Coffee size={28} className="placeholder-icon" />
+                <h2>
+                  Phân hệ: {menuList.find((m) => m.id === activeTab)?.label}
+                </h2>
+                <p>Sẵn sàng kết nối MySQL cho phân hệ này.</p>
+              </div>
+            )}
+        </div>
+      </main>
+    </div>
+  );
+}
