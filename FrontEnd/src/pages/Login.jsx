@@ -1,62 +1,113 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom"; // Import useNavigate
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "../../css/login.css";
 
 function Login() {
-  const [email, setEmail] = useState("");
+  const [usernameOrEmail, setUsernameOrEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [message, setMessage] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
-  const navigate = useNavigate(); // Hook chuyển trang mượt mà
+  const [loading, setLoading] = useState(false);
 
+  const navigate = useNavigate();
+
+  // Hàm hỗ trợ đăng nhập Bypass nhanh theo vai trò
   const handleBypassLogin = (role = "admin") => {
-    const mockUser = {
-      name: role === "admin" ? "Quản Trị Viên (Demo)" : "Thu Ngân (Demo)",
-      role: role,
-      MaVaiTro: role === "admin" ? 1 : 3,
-      email: "demo@coffee.com",
+    const roleProfiles = {
+      admin: {
+        name: "Nguyễn Hải Hậu (Admin)",
+        role: "admin",
+        MaVaiTro: 1,
+        email: "admin@coffee.com",
+      },
+      manager: {
+        name: "Quản Lý Cửa Hàng",
+        role: "manager",
+        MaVaiTro: 2,
+        email: "manager@coffee.com",
+      },
+      cashier: {
+        name: "Thu Ngân POS",
+        role: "cashier",
+        MaVaiTro: 3,
+        email: "cashier@coffee.com",
+      },
+      barista: {
+        name: "Nhân Viên Pha Chế",
+        role: "barista",
+        MaVaiTro: 4,
+        email: "barista@coffee.com",
+      },
+      waiter: {
+        name: "Nhân Viên Phục Vụ",
+        role: "waiter",
+        MaVaiTro: 5,
+        email: "waiter@coffee.com",
+      },
     };
+
+    const mockUser = roleProfiles[role] || roleProfiles.admin;
+
+    // Lưu thông tin người dùng & token vào Session/Local Storage
+    const storage = rememberMe ? localStorage : sessionStorage;
+    storage.setItem("user", JSON.stringify(mockUser));
+    storage.setItem("accessToken", "demo-token-bypass");
+
+    // Đồng bộ lại cả sessionStorage để chắc chắn các trang đọc được
     sessionStorage.setItem("user", JSON.stringify(mockUser));
-    localStorage.setItem("user", JSON.stringify(mockUser));
-    sessionStorage.setItem("accessToken", "demo-token");
-    localStorage.setItem("accessToken", "demo-token");
+    sessionStorage.setItem("accessToken", "demo-token-bypass");
+
     navigate("/home");
   };
 
+  // Xử lý gửi form đăng nhập chính thức sang Backend API
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage("");
 
+    if (!usernameOrEmail.trim() || !password.trim()) {
+      setIsSuccess(false);
+      setMessage("Vui lòng nhập tên đăng nhập/email và mật khẩu!");
+      return;
+    }
+
+    setLoading(true);
+
     try {
       const res = await axios.post("http://localhost:5000/api/login", {
-        email,
-        password,
+        username: usernameOrEmail,
+        email: usernameOrEmail,
+        password: password,
       });
 
       if (res.data.success) {
         setIsSuccess(true);
-        setMessage("Đăng nhập thành công!");
+        setMessage("Đăng nhập thành công! Đang chuyển hướng...");
 
-        // Lưu thông tin đồng bộ vào cả sessionStorage và localStorage
         const userData = JSON.stringify(res.data.user);
-        sessionStorage.setItem("user", userData);
-        localStorage.setItem("user", userData);
+        const token = res.data.accessToken || res.data.token || "jwt-token";
 
-        // Lưu cả JWT token để gắn vào header khi gọi các API sau
-        if (res.data.accessToken) {
-          localStorage.setItem("accessToken", res.data.accessToken);
-          sessionStorage.setItem("accessToken", res.data.accessToken);
+        if (rememberMe) {
+          localStorage.setItem("user", userData);
+          localStorage.setItem("accessToken", token);
         }
+        sessionStorage.setItem("user", userData);
+        sessionStorage.setItem("accessToken", token);
 
-        // Chuyển hướng sang /home
         setTimeout(() => {
           navigate("/home");
         }, 500);
+      } else {
+        setIsSuccess(false);
+        setMessage(
+          res.data.message || "Tên đăng nhập hoặc mật khẩu không chính xác.",
+        );
       }
     } catch (error) {
-      console.error(error);
+      console.error("Lỗi đăng nhập:", error);
       if (
         error.response &&
         error.response.data &&
@@ -65,13 +116,17 @@ function Login() {
         setIsSuccess(false);
         setMessage(error.response.data.message);
       } else {
-        // Backend offline -> tự động vào chế độ demo
+        // Nếu Backend chưa bật hoặc ngắt kết nối -> Tự động chuyển qua Demo Mode
         setIsSuccess(true);
-        setMessage("Không có Backend: Đang tự động vào hệ thống với tài khoản Demo...");
+        setMessage(
+          "Không kết nối được Backend! Đang tự động vào giao diện Demo Admin...",
+        );
         setTimeout(() => {
           handleBypassLogin("admin");
-        }, 600);
+        }, 800);
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -81,11 +136,11 @@ function Login() {
         {/* Logo biểu tượng ly cà phê */}
         <div className="coffee-logo-badge">☕</div>
 
-        <h3 className="login-title">Coffee</h3>
-        <p className="login-subtitle">Hệ thống Quản lý Cửa hàng Cà Phê</p>
+        <h3 className="login-title">QuanLyCF</h3>
+        <p className="login-subtitle">Hệ thống Quản lý Cửa hàng Cà Phê & POS</p>
 
         <div className="coffee-divider">
-          <span>Hệ thống đăng nhập</span>
+          <span>Đăng nhập hệ thống</span>
         </div>
 
         {message && (
@@ -99,61 +154,101 @@ function Login() {
 
         <form onSubmit={handleSubmit}>
           <div className="mb-3">
-            <label className="form-label">Tên đăng nhập / Email</label>
+            <label className="form-label font-weight-bold">
+              Tên đăng nhập / Email
+            </label>
             <input
               type="text"
               className="form-control"
-              placeholder="Nhập email đăng nhập..."
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Nhập tên đăng nhập hoặc email..."
+              value={usernameOrEmail}
+              onChange={(e) => setUsernameOrEmail(e.target.value)}
+              required
             />
           </div>
 
           <div className="mb-3">
-            <label className="form-label">Mật khẩu</label>
+            <label className="form-label font-weight-bold">Mật khẩu</label>
             <input
               type="password"
               className="form-control"
               placeholder="Nhập mật khẩu..."
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              required
             />
           </div>
 
-          <div className="form-options">
+          <div className="form-options d-flex justify-content-between align-items-center mb-3">
             <div className="form-check">
               <input
                 type="checkbox"
                 className="form-check-input"
                 id="rememberCheck"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
               />
-              <label className="form-check-label" htmlFor="rememberCheck">
-                Ghi nhớ
+              <label
+                className="form-check-label text-secondary"
+                htmlFor="rememberCheck"
+              >
+                Ghi nhớ đăng nhập
               </label>
             </div>
-            <a href="#forgot">Quên mật khẩu?</a>
+            <a
+              href="#forgot"
+              className="text-decoration-none text-primary small"
+            >
+              Quên mật khẩu?
+            </a>
           </div>
 
-          <button type="submit" className="btn btn-login w-100 mb-3">
-            Đăng Nhập Ngay
+          <button
+            type="submit"
+            className="btn btn-login w-100 mb-3 text-white font-weight-bold"
+            disabled={loading}
+          >
+            {loading ? "Đang xử lý..." : "Đăng Nhập"}
           </button>
 
+          {/* CHẾ ĐỘ THỬ NGHIỆM BYPASS DEMO */}
           <div className="pt-3 border-top text-center">
-            <p className="text-muted small mb-2">⚡ Chưa có backend? Vào thẳng giao diện:</p>
-            <div className="d-flex gap-2">
+            <p className="text-muted small mb-2"></p>
+            <div className="d-flex flex-wrap gap-1 justify-content-center">
               <button
                 type="button"
                 className="btn btn-outline-primary btn-sm flex-fill"
                 onClick={() => handleBypassLogin("admin")}
               >
-                Admin (Đầy đủ tính năng)
+                Admin
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline-info btn-sm flex-fill"
+                onClick={() => handleBypassLogin("manager")}
+              >
+                Quản lý
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline-success btn-sm flex-fill"
+                onClick={() => handleBypassLogin("cashier")}
+              >
+                Thu ngân
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline-warning btn-sm flex-fill"
+                onClick={() => handleBypassLogin("barista")}
+              >
+                Pha chế
               </button>
               <button
                 type="button"
                 className="btn btn-outline-secondary btn-sm flex-fill"
-                onClick={() => handleBypassLogin("staff")}
+                onClick={() => handleBypassLogin("waiter")}
               >
-                Nhân viên (POS)
+                Phục vụ
               </button>
             </div>
           </div>
@@ -164,6 +259,5 @@ function Login() {
     </div>
   );
 }
-// ddang xuat
+
 export default Login;
-//push tong tien hang
