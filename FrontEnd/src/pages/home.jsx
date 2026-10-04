@@ -42,17 +42,19 @@ import {
 export default function Home() {
   const navigate = useNavigate();
 
-  // 1. THÔNG TIN NGƯỜI DÙNG & VAI TRÒ
+  // 1. THÔNG TIN NGƯỜI DÙNG & PHÂN QUYỀN VAI TRÒ (ROLE)
   const userStr =
     sessionStorage.getItem("user") || localStorage.getItem("user");
   const user = userStr
     ? JSON.parse(userStr)
     : { name: "Nguyễn Hải Hậu", role: "Admin" };
-  const rawRole = (user.role || user.MaVaiTro || "staff")
+
+  const rawRole = (user.role || user.MaVaiTro || "cashier")
     .toString()
     .toLowerCase();
 
-  let currentRole = "staff";
+  // Chuẩn hóa Role thành 5 cấp bậc chính
+  let currentRole = "cashier";
   if (rawRole.includes("admin") || rawRole === "1") {
     currentRole = "admin";
   } else if (
@@ -61,13 +63,37 @@ export default function Home() {
     rawRole === "2"
   ) {
     currentRole = "manager";
+  } else if (
+    rawRole.includes("pha chế") ||
+    rawRole.includes("barista") ||
+    rawRole === "3"
+  ) {
+    currentRole = "barista";
+  } else if (
+    rawRole.includes("phục vụ") ||
+    rawRole.includes("waiter") ||
+    rawRole === "4"
+  ) {
+    currentRole = "waiter";
   } else {
-    currentRole = "staff";
+    currentRole = "cashier"; // Thu ngân mặc định
   }
 
-  const [activeTab, setActiveTab] = useState(
-    currentRole === "staff" ? "pos" : "dashboard",
-  );
+  // Tự động chọn Tab mặc định theo vai trò đăng nhập
+  const getDefaultTab = (role) => {
+    switch (role) {
+      case "barista":
+        return "inventory"; // Pha chế mặc định mở Kho / Đồ uống
+      case "waiter":
+        return "tables"; // Phục vụ mặc định mở Sơ đồ bàn
+      case "cashier":
+        return "pos"; // Thu ngân mặc định mở POS
+      default:
+        return "dashboard"; // Manager / Admin
+    }
+  };
+
+  const [activeTab, setActiveTab] = useState(getDefaultTab(currentRole));
 
   // Bàn đang được chọn để tạo đơn tại POS
   const [selectedPosTable, setSelectedPosTable] = useState("Bàn 01");
@@ -84,7 +110,7 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
-  // Hàm xử lý Đăng xuất triệt để
+  // Xử lý Đăng xuất
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -144,7 +170,7 @@ export default function Home() {
     }
   };
 
-  // Debounce tìm kiếm SĐT (tránh spam query xuống MySQL)
+  // Debounce tìm kiếm SĐT khách hàng
   useEffect(() => {
     if (activeTab === "customers") {
       const timer = setTimeout(() => {
@@ -155,7 +181,7 @@ export default function Home() {
     }
   }, [customerSearch, currentPage, activeTab]);
 
-  // Kiểm tra sinh nhật hôm nay
+  // Kiểm tra sinh nhật
   const isBirthdayToday = (dobString) => {
     if (!dobString) return false;
     const today = new Date();
@@ -165,7 +191,7 @@ export default function Home() {
     );
   };
 
-  // Xử lý Thêm / Sửa khách hàng vào MySQL
+  // Thêm / Sửa khách hàng
   const handleSaveCustomer = async (e) => {
     e.preventDefault();
 
@@ -182,9 +208,7 @@ export default function Home() {
 
       const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
-        throw new Error(
-          "Server Backend chưa bật hoặc đường dẫn API bị sai (Server trả về HTML)!",
-        );
+        throw new Error("Server trả về lỗi không đúng định dạng JSON!");
       }
 
       const resData = await response.json();
@@ -202,10 +226,9 @@ export default function Home() {
     }
   };
 
-  // Xóa khách hàng khỏi MySQL
+  // Xóa khách hàng
   const handleDeleteCustomer = async (id) => {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa khách hàng này khỏi MySQL?"))
-      return;
+    if (!window.confirm("Bạn có chắc chắn muốn xóa khách hàng này?")) return;
 
     try {
       const response = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
@@ -218,7 +241,7 @@ export default function Home() {
     }
   };
 
-  // Tích / Trừ điểm trên MySQL
+  // Tích / Trừ điểm
   const handleUpdatePoints = async (action) => {
     const amount = parseInt(pointDelta, 10);
     if (isNaN(amount) || amount <= 0) {
@@ -246,7 +269,7 @@ export default function Home() {
     }
   };
 
-  // Danh mục Menu (Đã bổ sung Quản lý Hóa đơn & Đơn hàng)
+  // 3. DANH MỤC MENU & CẤP QUYỀN HỆ THỐNG
   const menuList = [
     {
       id: "dashboard",
@@ -258,49 +281,49 @@ export default function Home() {
       id: "pos",
       label: "Tạo đơn & Thanh toán (POS)",
       icon: <CreditCard size={18} />,
-      roles: ["staff", "admin", "manager"],
+      roles: ["admin", "manager", "cashier"],
     },
     {
       id: "orders",
       label: "Quản lý Hóa đơn & Đơn hàng",
       icon: <FileText size={18} />,
-      roles: ["staff", "admin", "manager"],
+      roles: ["admin", "manager", "cashier"],
     },
     {
       id: "tables",
-      label: "Sơ đồ bàn",
+      label: "Sơ đồ bàn & Gọi món",
       icon: <Grid size={18} />,
-      roles: ["staff", "admin", "manager"],
+      roles: ["admin", "manager", "cashier", "waiter"],
     },
     {
       id: "customers",
       label: "Quản lý khách hàng",
       icon: <UserCheck size={18} />,
-      roles: ["staff", "admin", "manager"],
+      roles: ["admin", "manager", "cashier"],
     },
     {
       id: "categories",
       label: "Quản lý Danh mục",
       icon: <Grid size={18} />,
-      roles: ["manager", "admin"],
+      roles: ["admin", "manager"],
     },
     {
       id: "inventory",
       label: "Quản lý Đồ Uống & Thực Đơn",
       icon: <Package size={18} />,
-      roles: ["manager", "admin"],
+      roles: ["admin", "manager", "barista"],
     },
     {
       id: "shifts_approval",
       label: "Duyệt ca làm & Chấm công",
       icon: <Calendar size={18} />,
-      roles: ["manager", "admin"],
+      roles: ["admin", "manager"],
     },
     {
       id: "reports",
       label: "Báo cáo doanh thu",
       icon: <BarChart2 size={18} />,
-      roles: ["manager", "admin"],
+      roles: ["admin", "manager"],
     },
     {
       id: "hr",
@@ -322,9 +345,22 @@ export default function Home() {
     },
   ];
 
+  // Lọc các Menu thỏa mãn Role hiện tại
   const allowedMenus = menuList.filter((item) =>
     item.roles.includes(currentRole),
   );
+
+  // Hiển thị tên Vai trò Tiếng Việt
+  const getRoleDisplayName = (role) => {
+    const rolesMap = {
+      admin: "ADMIN QUẢN TRỊ",
+      manager: "QUẢN LÝ CỬA HÀNG",
+      cashier: "THU NGÂN",
+      barista: "PHA CHẾ / BẾP",
+      waiter: "NHÂN VIÊN PHỤC VỤ",
+    };
+    return rolesMap[role] || role.toUpperCase();
+  };
 
   return (
     <div className="home-container">
@@ -337,7 +373,7 @@ export default function Home() {
 
         <nav className="sidebar-nav">
           <div className="nav-group-title">
-            QUẢN LÝ ({currentRole.toUpperCase()})
+            QUẢN LÝ ({getRoleDisplayName(currentRole)})
           </div>
 
           {allowedMenus.map((item) => (
@@ -379,7 +415,7 @@ export default function Home() {
               <div className="user-info">
                 <span className="user-name">{user.name || "Người dùng"}</span>
                 <span className="user-role-badge">
-                  {currentRole.toUpperCase()}
+                  {getRoleDisplayName(currentRole)}
                 </span>
               </div>
             </div>
@@ -428,8 +464,7 @@ export default function Home() {
                     Quản lý Khách Hàng (MySQL Database)
                   </h2>
                   <p className="page-subtitle">
-                    Dữ liệu được lưu trữ trực tiếp trên MySQL - Tra cứu SĐT cực
-                    nhanh
+                    Dữ liệu lưu trữ trực tiếp trên MySQL - Tra cứu SĐT nhanh
                   </p>
                 </div>
                 <button
@@ -658,12 +693,7 @@ export default function Home() {
                         />
                       </div>
                       <div className="form-group">
-                        <label>
-                          Số điện thoại (*){" "}
-                          <small className="text-muted">
-                            (Duy nhất trong MySQL)
-                          </small>
-                        </label>
+                        <label>Số điện thoại (*)</label>
                         <input
                           type="tel"
                           value={customerForm.phone}
@@ -765,7 +795,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* TAB PLACEHOLDER DÀNH CHO CÁC PHÂN HỆ KHÁC */}
+          {/* TAB PLACEHOLDER CÁC PHÂN HỆ KHÁC */}
           {activeTab !== "pos" &&
             activeTab !== "orders" &&
             activeTab !== "customers" &&
