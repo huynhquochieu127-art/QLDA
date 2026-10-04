@@ -11,6 +11,20 @@ function Login() {
   const [isSuccess, setIsSuccess] = useState(false);
   const navigate = useNavigate(); // Hook chuyển trang mượt mà
 
+  const handleBypassLogin = (role = "admin") => {
+    const mockUser = {
+      name: role === "admin" ? "Quản Trị Viên (Demo)" : "Thu Ngân (Demo)",
+      role: role,
+      MaVaiTro: role === "admin" ? 1 : 3,
+      email: "demo@coffee.com",
+    };
+    sessionStorage.setItem("user", JSON.stringify(mockUser));
+    localStorage.setItem("user", JSON.stringify(mockUser));
+    sessionStorage.setItem("accessToken", "demo-token");
+    localStorage.setItem("accessToken", "demo-token");
+    navigate("/home");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage("");
@@ -36,23 +50,27 @@ function Login() {
           sessionStorage.setItem("accessToken", res.data.accessToken);
         }
 
-        // Chuyển hướng mượt sang /dashboard mà không load lại trang
+        // Chuyển hướng sang /home
         setTimeout(() => {
-          navigate("/dashboard");
-        }, 800);
+          navigate("/home");
+        }, 500);
       }
     } catch (error) {
       console.error(error);
-      setIsSuccess(false);
-
       if (
         error.response &&
         error.response.data &&
         error.response.data.message
       ) {
+        setIsSuccess(false);
         setMessage(error.response.data.message);
       } else {
-        setMessage("Không thể kết nối đến server!");
+        // Backend offline -> tự động vào chế độ demo
+        setIsSuccess(true);
+        setMessage("Không có Backend: Đang tự động vào hệ thống với tài khoản Demo...");
+        setTimeout(() => {
+          handleBypassLogin("admin");
+        }, 600);
       }
     }
   };
@@ -88,7 +106,6 @@ function Login() {
               placeholder="Nhập email đăng nhập..."
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
             />
           </div>
 
@@ -100,7 +117,6 @@ function Login() {
               placeholder="Nhập mật khẩu..."
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              required
             />
           </div>
 
@@ -118,9 +134,29 @@ function Login() {
             <a href="#forgot">Quên mật khẩu?</a>
           </div>
 
-          <button type="submit" className="btn btn-login w-100">
+          <button type="submit" className="btn btn-login w-100 mb-3">
             Đăng Nhập Ngay
           </button>
+
+          <div className="pt-3 border-top text-center">
+            <p className="text-muted small mb-2">⚡ Chưa có backend? Vào thẳng giao diện:</p>
+            <div className="d-flex gap-2">
+              <button
+                type="button"
+                className="btn btn-outline-primary btn-sm flex-fill"
+                onClick={() => handleBypassLogin("admin")}
+              >
+                Admin (Đầy đủ tính năng)
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline-secondary btn-sm flex-fill"
+                onClick={() => handleBypassLogin("staff")}
+              >
+                Nhân viên (POS)
+              </button>
+            </div>
+          </div>
         </form>
 
         <div className="login-footer"></div>

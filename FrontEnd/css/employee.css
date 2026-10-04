@@ -1,0 +1,1148 @@
+/* ========================================================
+   QUẢN LÝ NHÂN SỰ & FORM THÊM NHÂN VIÊN (ADMIN)
+   ======================================================== */
+
+.employee-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Thống kê nhanh Header Cards */
+.employee-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.employee-stat-card {
+  background: #ffffff;
+  padding: 18px 20px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #f0f0f0;
+}
+
+.employee-stat-info h4 {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.employee-stat-info .stat-number {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.employee-stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.employee-stat-icon.blue {
+  background-color: #eff6ff;
+  color: #2563eb;
+}
+
+.employee-stat-icon.green {
+  background-color: #f0fdf4;
+  color: #16a34a;
+}
+
+.employee-stat-icon.purple {
+  background-color: #faf5ff;
+  color: #9333ea;
+}
+
+.employee-stat-icon.amber {
+  background-color: #fffbeb;
+  color: #d97706;
+}
+
+/* Thanh công cụ tìm kiếm và lọc */
+.employee-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: #ffffff;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.toolbar-search {
+  flex: 1;
+  min-width: 260px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.toolbar-search svg {
+  position: absolute;
+  left: 12px;
+  color: #9ca3af;
+}
+
+.toolbar-search input {
+  width: 100%;
+  padding: 9px 12px 9px 38px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.toolbar-search input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.toolbar-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.filter-select {
+  padding: 9px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+  color: #374151;
+  outline: none;
+  cursor: pointer;
+}
+
+.filter-select:focus {
+  border-color: #2563eb;
+}
+
+.btn-primary-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary-add:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+}
+
+/* Bảng danh sách nhân viên */
+.employee-table-wrapper {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  border: 1px solid #f0f0f0;
+}
+
+.employee-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.employee-table thead {
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.employee-table th {
+  padding: 14px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4b5563;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.employee-table td {
+  padding: 14px 18px;
+  font-size: 14px;
+  color: #1f2937;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+}
+
+.employee-table tr:hover {
+  background-color: #f8fafc;
+}
+
+/* User cell */
+.emp-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.emp-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #e0e7ff;
+  color: #4338ca;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.emp-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.emp-name {
+  font-weight: 600;
+  color: #111827;
+}
+
+.emp-email {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+/* Phone & Login badge */
+.login-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f1f5f9;
+  color: #334155;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: monospace;
+  font-weight: 600;
+}
+
+.login-tag svg {
+  color: #64748b;
+}
+
+.cccd-cell {
+  font-family: monospace;
+  letter-spacing: 0.5px;
+  color: #374151;
+}
+
+/* Role Badges */
+.badge-role {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-role.admin {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.badge-role.manager {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.badge-role.cashier {
+  background: #e0e7ff;
+  color: #4f46e5;
+}
+
+.badge-role.barista {
+  background: #f3e8ff;
+  color: #9333ea;
+}
+
+/* Status Badges */
+.badge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.badge-status.active {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.badge-status.probation {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.badge-status.inactive {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.badge-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Action Buttons */
+.emp-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-icon-action {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-icon-action:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.btn-icon-action.delete:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+/* ========================================================
+   MODAL FORM THÊM NHÂN VIÊN MỚI
+   ======================================================== */
+.emp-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.emp-modal-content {
+  background: #ffffff;
+  width: 100%;
+  max-width: 680px;
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.emp-modal-header {
+  padding: 20px 24px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.emp-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.emp-modal-icon-badge {
+  width: 40px;
+  height: 40px;
+  background: #eff6ff;
+  color: #2563eb;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.emp-modal-title h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.emp-modal-title p {
+  margin: 2px 0 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.emp-modal-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  transition: all 0.15s;
+}
+
+.emp-modal-close:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.emp-modal-body {
+  padding: 24px;
+  max-height: calc(85vh - 140px);
+  overflow-y: auto;
+}
+
+/* Alert banner trong Modal */
+.form-banner-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.form-banner-success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Grid Layout Form */
+.emp-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.emp-form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.emp-form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.emp-form-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.required-mark {
+  color: #ef4444;
+  margin-left: 3px;
+}
+
+.optional-mark {
+  font-weight: 400;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.emp-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.emp-input-icon {
+  position: absolute;
+  left: 12px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.emp-input {
+  width: 100%;
+  padding: 10px 12px 10px 38px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  background-color: #ffffff;
+  color: #0f172a;
+  transition: all 0.2s ease;
+}
+
+.emp-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.emp-input.is-invalid {
+  border-color: #ef4444;
+  background-color: #fffaf0;
+}
+
+.emp-input.is-invalid:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+}
+
+/* Feedback message */
+.field-error-msg {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #ef4444;
+  font-size: 12px;
+  margin-top: 5px;
+  font-weight: 500;
+}
+
+.field-hint-msg {
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* Box gợi ý đăng nhập nổi bật */
+.login-credential-box {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 6px;
+}
+
+.login-credential-box-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 6px;
+}
+
+.login-credential-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.login-credential-preview span strong {
+  color: #0284c7;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+/* Modal Actions Footer */
+.emp-modal-footer {
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.btn-secondary-action {
+  padding: 9px 18px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-secondary-action:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.btn-submit-save {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 22px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-submit-save:hover {
+  background: #1d4ed8;
+  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.25);
+}
+
+.btn-reset-form {
+  padding: 9px 14px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  margin-right: auto;
+  text-decoration: underline;
+}
+
+.btn-reset-form:hover {
+  color: #0f172a;
+}
+
+/* ========================================================
+   PHÂN TRANG (PAGINATION - QH-20)
+   ======================================================== */
+.emp-pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: #ffffff;
+  border-top: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.emp-pagination-info {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.emp-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.emp-page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.emp-page-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.emp-page-btn.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.emp-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.emp-per-page-select {
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #475569;
+  background: #fff;
+  cursor: pointer;
+}
+
+/* Sorting Header */
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable-th:hover {
+  background-color: #f1f5f9;
+  color: #1e293b;
+}
+
+.th-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-export-csv {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-export-csv:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+/* ========================================================
+   MODAL XEM CHI TIẾT NHÂN VIÊN (PROFILE VIEW - QH-18)
+   ======================================================== */
+.profile-modal-card {
+  max-width: 580px;
+}
+
+.profile-top-banner {
+  background: linear-gradient(135deg, #1e3a8a, #2563eb);
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  color: #ffffff;
+}
+
+.profile-avatar-large {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 700;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+}
+
+.profile-title-text h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.profile-title-text .profile-id-badge {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: monospace;
+  margin-top: 4px;
+}
+
+.profile-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 24px;
+}
+
+.profile-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-info-item.full-col {
+  grid-column: 1 / -1;
+}
+
+.profile-info-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.profile-info-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.profile-info-value.phone {
+  font-family: monospace;
+  color: #2563eb;
+  font-size: 15px;
+}
+
+.profile-info-value.mono {
+  font-family: monospace;
+}
+
+.profile-note-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #475569;
+  font-style: italic;
+}
+
+/* ========================================================
+   THIẾT LẬP MỨC LƯƠNG CHO ADMIN (QH-27)
+   ======================================================== */
+.badge-salary {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.salary-amount-highlight {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 13px;
+  color: #047857;
+  background: #ecfdf5;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid #a7f3d0;
+}
+
+.salary-sub-text {
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* Modal Thiết lập lương */
+.salary-modal-card {
+  max-width: 620px;
+}
+
+.salary-current-box {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.salary-current-info h5 {
+  margin: 0 0 4px 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #166534;
+  font-weight: 600;
+}
+
+.current-salary-val {
+  font-size: 20px;
+  font-weight: 800;
+  color: #047857;
+  font-family: monospace;
+}
+
+.current-salary-date {
+  font-size: 12px;
+  color: #15803d;
+  margin-top: 2px;
+}
+
+/* Radio chọn loại hình lương */
+.salary-type-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.salary-type-card {
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  transition: all 0.15s;
+}
+
+.salary-type-card:hover {
+  border-color: #93c5fd;
+  background: #f8fafc;
+}
+
+.salary-type-card.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.salary-type-card input[type="radio"] {
+  accent-color: #2563eb;
+  width: 16px;
+  height: 16px;
+}
+
+.salary-type-label {
+  display: flex;
+  flex-direction: column;
+}
+
+.salary-type-label strong {
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.salary-type-label span {
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* Ô nhập liệu số tiền có định dạng hàng nghìn */
+.salary-input-box-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.salary-input-box-wrapper .currency-icon {
+  position: absolute;
+  left: 14px;
+  color: #047857;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.salary-currency-input {
+  width: 100%;
+  padding: 12px 65px 12px 38px;
+  border: 2px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  font-family: monospace;
+  outline: none;
+  background: #ffffff;
+  transition: all 0.2s;
+}
+
+.salary-currency-input:focus {
+  border-color: #059669;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
+}
+
+.currency-unit-badge {
+  position: absolute;
+  right: 12px;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Đọc số thành chữ tiếng Việt */
+.money-in-words-box {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: #047857;
+  background: #f0fdf4;
+  padding: 6px 12px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-style: italic;
+  border: 1px dashed #a7f3d0;
+}
+
+/* Nút bấm chọn số tiền nhanh */
+.quick-salary-presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.quick-salary-presets span {
+  font-size: 12px;
+  color: #64748b;
+  margin-right: 4px;
+}
+
+.btn-preset-val {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: #334155;
+  cursor: pointer;
+  font-family: monospace;
+  transition: all 0.15s;
+}
+
+.btn-preset-val:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+/* Tabs trong Profile Modal */
+.profile-modal-tabs {
+  display: flex;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0 16px;
+}
+
+.profile-tab-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+
+.profile-tab-item:hover {
+  color: #0f172a;
+}
+
+.profile-tab-item.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+}
+
+/* Lịch sử điều chỉnh lương */
+.salary-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.salary-history-table th {
+  background: #f8fafc;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  font-weight: 600;
+  color: #475569;
+  font-size: 12px;
+}
+
+.salary-history-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .emp-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .employee-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .salary-type-tabs {
+    grid-template-columns: 1fr;
+  }
+}
+
+
