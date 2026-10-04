@@ -1,7 +1,7 @@
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
-const http = require("http");           // Cần để Socket.IO gắn vào
+const http = require("http"); // Cần để Socket.IO gắn vào
 const { Server } = require("socket.io"); // Socket.IO
 const cors = require("cors");
 const mysql = require("mysql2/promise");
@@ -585,77 +585,92 @@ const initEmployeeTable = async () => {
       )
     `);
   } catch (err) {
-    console.warn("Chưa thể khởi tạo bảng nhanvien (MySQL có thể chưa kết nối):", err.message);
+    console.warn(
+      "Chưa thể khởi tạo bảng nhanvien (MySQL có thể chưa kết nối):",
+      err.message,
+    );
   }
 };
 initEmployeeTable();
+// ==========================================
+// 6. API QUẢN LÝ NHÂN SỰ (Dùng chính xác Database dacnpm)
+// ==========================================
 
-// [GET] Lấy danh sách nhân sự (Hỗ trợ Tìm kiếm, Lọc vai trò/trạng thái, Phân trang)
+// [GET] Lấy danh sách nhân sự (Truy vấn chuẩn LEFT JOIN chucvu)
 app.get("/api/employees", async (req, res) => {
   try {
-    const search = req.query.search || "";
+    const search = req.query.search || req.query.keyword || "";
     const role = req.query.role || "all";
     const status = req.query.status || "all";
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
-    let whereClauses = ["(HoTen LIKE ? OR SoDienThoai LIKE ? OR CCCD LIKE ? OR Email LIKE ?)"];
-    let params = [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`];
+    let whereClauses = ["1=1"];
+    let params = [];
 
-    if (role !== "all") {
-      whereClauses.push("VaiTro = ?");
+    // Tìm kiếm theo Họ tên hoặc Số điện thoại
+    if (search && search.trim() !== "" && search !== "undefined") {
+      whereClauses.push(
+        "(nv.HoTen LIKE ? OR nv.SoDienThoai LIKE ? OR nv.MaNhanVienCode LIKE ?)",
+      );
+      const searchParam = `%${search.trim()}%`;
+      params.push(searchParam, searchParam, searchParam);
+    }
+
+    // Lọc theo Chức vụ
+    if (role !== "all" && role !== "undefined" && role !== "Tất cả chức vụ") {
+      whereClauses.push("cv.TenChucVu = ?");
       params.push(role);
     }
 
-    if (status !== "all") {
-      whereClauses.push("TrangThai = ?");
+    // Lọc theo Trạng thái
+    if (
+      status !== "all" &&
+      status !== "undefined" &&
+      status !== "Tất cả trạng thái"
+    ) {
+      whereClauses.push("nv.TrangThai = ?");
       params.push(status);
     }
 
     const whereSQL = whereClauses.join(" AND ");
 
+    // Lấy tổng số dòng để phân trang
     const [countResult] = await db.query(
-      `SELECT COUNT(*) as total FROM nhanvien WHERE ${whereSQL}`,
-      params
+      `SELECT COUNT(*) as total 
+       FROM nhanvien nv 
+       LEFT JOIN chucvu cv ON nv.MaChucVu = cv.MaChucVu 
+       WHERE ${whereSQL}`,
+      params,
     );
 
+    // Truy vấn chính xác cấu trúc DB dacnpm
     const [rows] = await db.query(
       `SELECT 
-        MaNhanVien AS id,
-        HoTen AS fullName,
-        SoDienThoai AS phone,
-        CCCD AS cccd,
-        Email AS email,
-        VaiTro AS role,
-        TrangThai AS status,
-        GhiChu AS note,
-        DATE_FORMAT(NgayTao, '%d/%m/%Y') AS createdAt
-       FROM nhanvien 
+        nv.MaNhanVien AS rawId,
+        nv.MaNhanVienCode AS code,
+        nv.HoTen AS name,
+        nv.HoTen AS fullName,
+        nv.SoDienThoai AS phone,
+        nv.TrangThai AS status,
+        IFNULL(cv.TenChucVu, 'Chưa phân công') AS role,
+        IFNULL(cv.TenChucVu, 'Chưa phân công') AS roleName,
+        tk.Email AS email
+       FROM nhanvien nv
+       LEFT JOIN chucvu cv ON nv.MaChucVu = cv.MaChucVu
+       LEFT JOIN taikhoan tk ON nv.MaTaiKhoan = tk.MaTaiKhoan
        WHERE ${whereSQL}
-       ORDER BY MaNhanVien DESC
+       ORDER BY nv.MaNhanVien ASC
        LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
+      [...params, limit, offset],
     );
 
-    const roleMap = {
-      admin: "Quản trị viên (Admin)",
-      manager: "Quản lý cửa hàng",
-      cashier: "Thu ngân (POS)",
-      barista: "Pha chế (Barista)",
-    };
-
-    const statusMap = {
-      active: "Đang làm việc",
-      probation: "Thử việc",
-      inactive: "Tạm nghỉ",
-    };
-
+    // Format dữ liệu khớp với cả React Tailwind cũ lẫn mới
     const formattedData = rows.map((emp) => ({
       ...emp,
-      id: `NV${String(emp.id).padStart(3, "0")}`,
-      roleName: roleMap[emp.role] || "Nhân viên",
-      statusName: statusMap[emp.status] || "Đang làm việc",
+      id: emp.code || `NV${String(emp.rawId).padStart(3, "0")}`,
+      statusName: emp.status || "Đang làm việc",
     }));
 
     res.json({
@@ -666,7 +681,10 @@ app.get("/api/employees", async (req, res) => {
       currentPage: page,
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: "Lỗi truy vấn MySQL: " + err.message });
+    console.error("Lỗi MySQL Employee:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Lỗi truy vấn MySQL: " + err.message });
   }
 });
 
@@ -676,26 +694,36 @@ app.get("/api/employees/:id", async (req, res) => {
     const rawId = req.params.id.replace("NV", "");
     const [rows] = await db.query(
       "SELECT MaNhanVien as id, HoTen as fullName, SoDienThoai as phone, CCCD as cccd, Email as email, VaiTro as role, TrangThai as status, GhiChu as note, DATE_FORMAT(NgayTao, '%d/%m/%Y') as createdAt FROM nhanvien WHERE MaNhanVien = ?",
-      [rawId]
+      [rawId],
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy nhân viên!" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy nhân viên!" });
     }
 
     res.json({ success: true, data: rows[0] });
   } catch (err) {
-    res.status(500).json({ success: false, message: "Lỗi MySQL: " + err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Lỗi MySQL: " + err.message });
   }
 });
 
 // [POST] Thêm mới nhân viên vào MySQL
 app.post("/api/employees", async (req, res) => {
   try {
-    const { fullName, phone, cccd, email, role, status, note, password } = req.body;
+    const { fullName, phone, cccd, email, role, status, note, password } =
+      req.body;
 
     if (!fullName || !phone || !cccd) {
-      return res.status(400).json({ success: false, message: "Vui lòng nhập đủ Họ tên, SĐT và CCCD!" });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Vui lòng nhập đủ Họ tên, SĐT và CCCD!",
+        });
     }
 
     const [result] = await db.query(
@@ -710,7 +738,7 @@ app.post("/api/employees", async (req, res) => {
         status || "active",
         password || "123456",
         note ? note.trim() : null,
-      ]
+      ],
     );
 
     res.status(201).json({
@@ -720,9 +748,16 @@ app.post("/api/employees", async (req, res) => {
     });
   } catch (err) {
     if (err.code === "ER_DUP_ENTRY" || err.errno === 1062) {
-      return res.status(400).json({ success: false, message: "Số điện thoại này đã được đăng ký!" });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Số điện thoại này đã được đăng ký!",
+        });
     }
-    res.status(500).json({ success: false, message: "Lỗi MySQL: " + err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Lỗi MySQL: " + err.message });
   }
 });
 
@@ -734,16 +769,20 @@ app.patch("/api/employees/:id/status", async (req, res) => {
 
     const [result] = await db.query(
       "UPDATE nhanvien SET TrangThai = ? WHERE MaNhanVien = ?",
-      [status, rawId]
+      [status, rawId],
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy nhân viên!" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy nhân viên!" });
     }
 
     res.json({ success: true, message: "Cập nhật trạng thái thành công!" });
   } catch (err) {
-    res.status(500).json({ success: false, message: "Lỗi MySQL: " + err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Lỗi MySQL: " + err.message });
   }
 });
 
@@ -753,16 +792,20 @@ app.delete("/api/employees/:id", async (req, res) => {
     const rawId = req.params.id.replace("NV", "");
     const [result] = await db.query(
       "DELETE FROM nhanvien WHERE MaNhanVien = ?",
-      [rawId]
+      [rawId],
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy nhân viên!" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy nhân viên!" });
     }
 
     res.json({ success: true, message: "Xóa nhân viên thành công!" });
   } catch (err) {
-    res.status(500).json({ success: false, message: "Lỗi MySQL: " + err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Lỗi MySQL: " + err.message });
   }
 });
 
