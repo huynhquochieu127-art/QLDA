@@ -22,7 +22,7 @@ test.describe("Kiểm thử chức năng Thêm bàn trong quản lý khu vực",
     await modal.waitFor({ state: "visible" });
 
     // Điền "Bàn 11" vào ô Tên bàn (tìm đúng trong modal)
-    await modal.getByPlaceholder("Ví dụ: Bàn 01, Bàn VIP 1...").fill("Bàn 11");
+    await modal.getByPlaceholder("Ví dụ: Bàn 01, Bàn VIP 1...").fill("Bàn 12");
 
     // Điền "4" vào ô Số ghế (input number trong modal)
     await modal.locator('input[type="number"]').fill("4");
@@ -34,7 +34,7 @@ test.describe("Kiểm thử chức năng Thêm bàn trong quản lý khu vực",
     await modal.waitFor({ state: "hidden" });
 
     // 9. Kiểm tra kết quả: "Bàn 11" xuất hiện trong danh sách
-    const newTable = page.locator("text=Bàn 11");
+    const newTable = page.locator("text=Bàn 12");
     await expect(newTable).toBeVisible();
 
     // 10. Giữ trình duyệt lại 5 giây để bạn nhìn rõ kết quả trước khi tự đóng
