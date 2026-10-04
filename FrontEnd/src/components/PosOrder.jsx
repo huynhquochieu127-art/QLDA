@@ -329,22 +329,60 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
         new Date().toLocaleDateString("vi-VN"),
     };
 
+    // ── Lưu đơn hàng vào Backend + Cập nhật trạng thái bàn ──────────────────
     try {
-      await fetch("http://localhost:5000/api/orders", {
+      // Lấy MaBan từ tên bàn đang chọn (ví dụ "T3" -> cần tìm ID)
+      let maBan = null;
+      try {
+        const tablesRes = await fetch("http://localhost:5000/api/tables");
+        const tablesData = await tablesRes.json();
+        const matched = tablesData.find(
+          (t) =>
+            t.TenBan === selectedTable ||
+            t.TenBan === selectedTable.replace("Bàn ", "T") ||
+            `Bàn ${t.TenBan}` === selectedTable
+        );
+        if (matched) maBan = matched.MaBan;
+      } catch (_) {}
+
+      // 1. Gọi API checkout (lưu đơn hàng + chi tiết vào MySQL)
+      const res = await fetch("http://localhost:5000/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customerId: selectedCustomer ? selectedCustomer.id : null,
-          items: cart,
-          totalAmount,
-          paymentMethod,
+          maBan,
+          maNhanVien: null,
+          maKhachHang: selectedCustomer ? selectedCustomer.id : null,
+          items: cart.map((item) => ({
+            maSanPham: item.id || null,
+            tenSanPham: item.name,
+            soLuong: item.quantity,
+            donGia: item.price,
+          })),
+          tongTien: totalAmount,
+          tienKhachDua:
+            paymentMethod === "CASH" ? numericCustomerCash : totalAmount,
+          phuongThucTT:
+            paymentMethod === "TRANSFER" ? "CHUYEN_KHOAN" : "TIEN_MAT",
         }),
       });
+
+      const resData = await res.json();
+      if (resData.maDonHang || resData.data?.maDonHang) {
+        receiptInfo.orderId =
+          "HD" + (resData.maDonHang || resData.data?.maDonHang);
+      }
+
+      // 2. Cập nhật trạng thái bàn -> CO_KHACH và Emit realtime Socket.IO
+      if (maBan) {
+        await fetch(`http://localhost:5000/api/tables/${maBan}/status`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trangThai: "CO_KHACH" }),
+        });
+      }
     } catch (err) {
-      console.log(
-        "Đơn hàng được lưu thành công trên máy (Offline)",
-        err.message,
-      );
+      console.warn("Lưu đơn hàng offline:", err.message);
     }
 
     setLastReceipt(receiptInfo);
@@ -353,6 +391,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
     setCart([]);
     handleClearCustomer();
   };
+
 
   return (
     <div className="pos-container">

@@ -6,6 +6,8 @@ import TableManagement from "../components/TableManagement";
 import CategoryManagement from "../components/CategoryManagement";
 import ProductManagement from "../components/ProductManagement";
 import OrderManagement from "../components/OrderManagement";
+import EmployeeManagement from "../components/EmployeeManagement";
+import ShiftApprovalManagement from "../components/ShiftApprovalManagement";
 import {
   Clock,
   User,
@@ -794,24 +796,30 @@ export default function Home() {
               )}
             </div>
           )}
+{/* TAB QUẢN LÝ NHÂN SỰ & PHÂN QUYỀN */}
+      {activeTab === "hr" && (
+        <EmployeeManagement currentRole={currentRole} />
+      )}
 
-          {/* TAB PLACEHOLDER CÁC PHÂN HỆ KHÁC */}
-          {activeTab !== "pos" &&
-            activeTab !== "orders" &&
-            activeTab !== "customers" &&
-            activeTab !== "categories" &&
-            activeTab !== "inventory" &&
-            activeTab !== "tables" && (
-              <div className="tab-placeholder">
-                <Coffee size={28} className="placeholder-icon" />
-                <h2>
-                  Phân hệ: {menuList.find((m) => m.id === activeTab)?.label}
-                </h2>
-                <p>Sẵn sàng kết nối MySQL cho phân hệ này.</p>
-              </div>
-            )}
-        </div>
-      </main>
-    </div>
-  );
-}
+      {/* TAB DUYỆT CA LÀM & CHẤM CÔNG */}
+      {activeTab === "shifts_approval" && (
+        <ShiftApprovalManagement currentRole={currentRole} />
+      )}
+
+      {/* TAB PLACEHOLDER DÀNH CHO CÁC PHÂN HỆ KHÁC */}
+      {activeTab !== "pos" &&
+        activeTab !== "orders" &&
+        activeTab !== "customers" &&
+        activeTab !== "categories" &&
+        activeTab !== "inventory" &&
+        activeTab !== "tables" &&
+        activeTab !== "hr" &&
+        activeTab !== "shifts_approval" && (
+          <div className="tab-placeholder">
+            <Coffee size={28} className="placeholder-icon" />
+            <h2>
+              Phân hệ: {menuList.find((m) => m.id === activeTab)?.label}
+            </h2>
+            <p>Sẵn sàng kết nối MySQL cho phân hệ này.</p>
+          </div>
+        )}
