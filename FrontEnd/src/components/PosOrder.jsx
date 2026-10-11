@@ -329,10 +329,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
         new Date().toLocaleDateString("vi-VN"),
     };
 
-<<<<<<< HEAD
     // ── Lưu đơn hàng vào Backend + Cập nhật trạng thái bàn ──────────────────
-=======
->>>>>>> 417f2228d9572667a08f100419becfa91b9aaa63
     try {
       // Lấy MaBan từ tên bàn đang chọn (ví dụ "T3" -> cần tìm ID)
       let maBan = null;
@@ -385,14 +382,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
         });
       }
     } catch (err) {
-<<<<<<< HEAD
       console.warn("Lưu đơn hàng offline:", err.message);
-=======
-      console.log(
-        "Đơn hàng được lưu thành công trên máy (Offline)",
-        err.message,
-      );
->>>>>>> 417f2228d9572667a08f100419becfa91b9aaa63
     }
 
     setLastReceipt(receiptInfo);
