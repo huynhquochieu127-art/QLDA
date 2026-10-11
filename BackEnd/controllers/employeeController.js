@@ -64,7 +64,9 @@ exports.createEmployee = async (req, res) => {
     const finalGender = gioiTinh || gender || "Nam";
     const finalAddress = (diaChi || address || "").trim();
     const finalPosition = (chucVu || position || "Nhân viên").trim();
-    const finalEmpType = loaiNhanVien || employeeType || "Full-time";
+    // Phân loại hợp đồng: Full-time (Lương cứng) hoặc Part-time (Lương theo giờ)
+    const rawEmp = (loaiNhanVien || employeeType || "Full-time").toString().trim();
+    const finalEmpType = rawEmp.toLowerCase().includes("part") ? "Part-time" : "Full-time";
     const finalSalary = luong !== undefined ? Number(luong) : (salary !== undefined ? Number(salary) : 0);
 
     // Xác định vai trò (Mặc định 3 = Nhân viên, 2 = Quản lý, 1 = Admin)
@@ -201,6 +203,19 @@ exports.createEmployee = async (req, res) => {
         vaiTro: tenVaiTro,
         chucVu: finalPosition,
         loaiNhanVien: finalEmpType,
+        loaiHopDong:
+          finalEmpType === "Full-time"
+            ? "Full-time (Toàn thời gian - Nhận lương cứng)"
+            : "Part-time (Bán thời gian - Nhận lương theo giờ)",
+        hinhThucLuong:
+          finalEmpType === "Full-time"
+            ? "Lương cứng theo tháng"
+            : "Lương theo giờ",
+        mucLuong: finalSalary,
+        congThucTinhLuong:
+          finalEmpType === "Full-time"
+            ? "Lương thực nhận = Lương cứng hàng tháng + Phụ cấp/Thưởng - Khấu trừ"
+            : "Lương thực nhận = (Tổng giờ làm thực tế x Lương/giờ) + Thưởng - Khấu trừ",
         huongDan:
           "Admin hãy bàn giao Email và Mật khẩu mặc định này cho nhân viên mới. Nhắc nhở nhân viên đổi mật khẩu ngay sau lần đầu đăng nhập.",
       },

@@ -144,6 +144,8 @@ export default function EmployeeManagement() {
 - Quy tắc sinh mật khẩu: ${handoverData.quyTacTaoMatKhau}
 - Vai trò: ${handoverData.vaiTro}
 - Vị trí: ${handoverData.chucVu}
+- Loại hợp đồng: ${handoverData.loaiHopDong || handoverData.loaiNhanVien}
+- Cơ chế tính lương: ${handoverData.congThucTinhLuong || (handoverData.loaiNhanVien === "Part-time" ? "Lương theo giờ x Số giờ công thực tế" : "Lương cứng cố định hàng tháng")}
 ------------------------------------
 * Lưu ý: Vui lòng đổi mật khẩu trong lần đăng nhập đầu tiên tại hệ thống Quán Cà Phê.`;
 
@@ -291,7 +293,7 @@ export default function EmployeeManagement() {
               <th style={{ padding: "12px 16px" }}>CCCD</th>
               <th style={{ padding: "12px 16px" }}>Chức vụ</th>
               <th style={{ padding: "12px 16px" }}>Vai trò</th>
-              <th style={{ padding: "12px 16px" }}>Loại NV</th>
+              <th style={{ padding: "12px 16px" }}>Loại Hợp đồng & Lương</th>
               <th style={{ padding: "12px 16px" }}>Trạng thái</th>
             </tr>
           </thead>
@@ -374,8 +376,52 @@ export default function EmployeeManagement() {
                       {emp.TenVaiTro || (emp.MaVaiTro === 1 ? "Admin" : emp.MaVaiTro === 2 ? "Quản lý" : "Nhân viên")}
                     </span>
                   </td>
-                  <td style={{ padding: "12px 16px", color: "#64748b" }}>
-                    {emp.LoaiNhanVien || "Full-time"}
+                  <td style={{ padding: "12px 16px" }}>
+                    {emp.LoaiNhanVien === "Part-time" ? (
+                      <div>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            padding: "3px 8px",
+                            backgroundColor: "#fffbeb",
+                            color: "#b45309",
+                            borderRadius: "4px",
+                            fontSize: "0.78rem",
+                            fontWeight: 700,
+                            border: "1px solid #fde68a",
+                          }}
+                        >
+                          Part-time (Lương giờ)
+                        </span>
+                        <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "3px" }}>
+                          {emp.Luong && Number(emp.Luong) > 0
+                            ? `${Number(emp.Luong).toLocaleString("vi-VN")} đ / giờ`
+                            : "Chưa đặt"}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            padding: "3px 8px",
+                            backgroundColor: "#eff6ff",
+                            color: "#1d4ed8",
+                            borderRadius: "4px",
+                            fontSize: "0.78rem",
+                            fontWeight: 700,
+                            border: "1px solid #bfdbfe",
+                          }}
+                        >
+                          Full-time (Lương cứng)
+                        </span>
+                        <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "3px" }}>
+                          {emp.Luong && Number(emp.Luong) > 0
+                            ? `${Number(emp.Luong).toLocaleString("vi-VN")} đ / tháng`
+                            : "Chưa đặt"}
+                        </div>
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: "12px 16px" }}>
                     <span
@@ -673,25 +719,70 @@ export default function EmployeeManagement() {
                   </select>
                 </div>
 
-                {/* Loại nhân viên */}
-                <div>
-                  <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "#334155", marginBottom: "6px" }}>
-                    Hình thức làm việc
+                {/* LOẠI HỢP ĐỒNG (FULL-TIME HOẶC PART-TIME) */}
+                <div style={{ gridColumn: "span 2" }}>
+                  <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, color: "#1e293b", marginBottom: "6px" }}>
+                    Loại hợp đồng lao động <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <select
                     value={form.loaiNhanVien}
                     onChange={(e) => setForm({ ...form, loaiNhanVien: e.target.value })}
                     style={{
                       width: "100%",
-                      padding: "9px 12px",
-                      borderRadius: "6px",
-                      border: "1px solid #cbd5e1",
-                      fontSize: "0.9rem",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      border: "2px solid #6366f1",
+                      backgroundColor: "#f5f3ff",
+                      fontWeight: 600,
+                      color: "#312e81",
+                      fontSize: "0.92rem",
+                      cursor: "pointer",
                     }}
                   >
-                    <option value="Full-time">Toàn thời gian (Full-time)</option>
-                    <option value="Part-time">Bán thời gian (Part-time)</option>
+                    <option value="Full-time">
+                      Full-time (Toàn thời gian - Nhận lương cứng)
+                    </option>
+                    <option value="Part-time">
+                      Part-time (Bán thời gian - Nhận lương theo giờ)
+                    </option>
                   </select>
+
+                  {/* HỘP THÔNG BÁO CÔNG THỨC TÍNH LƯƠNG CHO CÁC SPRINT SAU */}
+                  {form.loaiNhanVien === "Full-time" ? (
+                    <div
+                      style={{
+                        marginTop: "8px",
+                        padding: "10px 14px",
+                        backgroundColor: "#eff6ff",
+                        border: "1px solid #bfdbfe",
+                        borderRadius: "8px",
+                        fontSize: "0.82rem",
+                        color: "#1e40af",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      💼 <strong>Quy tắc tính lương Full-time (Sprint sau):</strong> Nhân viên hưởng{" "}
+                      <strong>lương cứng cố định hàng tháng</strong> dựa trên số ngày công tiêu chuẩn.
+                      Công thức: <em>Lương nhận = Lương cứng + Phụ cấp/Thưởng - Khấu trừ</em>.
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        marginTop: "8px",
+                        padding: "10px 14px",
+                        backgroundColor: "#fffbeb",
+                        border: "1px solid #fde68a",
+                        borderRadius: "8px",
+                        fontSize: "0.82rem",
+                        color: "#92400e",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      ⏰ <strong>Quy tắc tính lương Part-time (Sprint sau):</strong> Nhân viên hưởng{" "}
+                      <strong>lương tính theo giờ công thực tế</strong>. Hệ thống sẽ lấy dữ liệu từ bảng chấm công / ca làm.
+                      Công thức: <em>Lương nhận = (Tổng số giờ làm thực tế x Lương/giờ) + Thưởng - Khấu trừ</em>.
+                    </div>
+                  )}
                 </div>
 
                 {/* Ngày vào làm */}
@@ -713,14 +804,20 @@ export default function EmployeeManagement() {
                   />
                 </div>
 
-                {/* Mức lương */}
+                {/* Mức lương (Tự động thay đổi label & placeholder theo loại hợp đồng) */}
                 <div>
                   <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "#334155", marginBottom: "6px" }}>
-                    Mức lương (VNĐ)
+                    {form.loaiNhanVien === "Part-time"
+                      ? "Mức lương theo giờ (VNĐ / Giờ)"
+                      : "Mức lương cứng / Tháng (VNĐ)"}
                   </label>
                   <input
                     type="number"
-                    placeholder="Ví dụ: 6000000"
+                    placeholder={
+                      form.loaiNhanVien === "Part-time"
+                        ? "Ví dụ: 25000 (hoặc 30000)"
+                        : "Ví dụ: 6500000 (Lương tháng)"
+                    }
                     value={form.luong}
                     onChange={(e) => setForm({ ...form, luong: e.target.value })}
                     style={{
@@ -731,6 +828,11 @@ export default function EmployeeManagement() {
                       fontSize: "0.9rem",
                     }}
                   />
+                  <span style={{ display: "block", fontSize: "0.76rem", color: "#64748b", marginTop: "4px" }}>
+                    {form.loaiNhanVien === "Part-time"
+                      ? "Đơn giá trả cho 1 giờ làm việc"
+                      : "Mức lương cơ bản cố định mỗi tháng"}
+                  </span>
                 </div>
 
                 {/* Địa chỉ */}
@@ -901,6 +1003,24 @@ export default function EmployeeManagement() {
                     {handoverData.chucVu} ({handoverData.vaiTro})
                   </span>
                 </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
+                  <span style={{ color: "#64748b", fontSize: "0.85rem" }}>Loại hợp đồng:</span>
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      color: handoverData.loaiNhanVien === "Part-time" ? "#b45309" : "#1d4ed8",
+                    }}
+                  >
+                    {handoverData.loaiHopDong || (handoverData.loaiNhanVien === "Part-time" ? "Part-time (Lương theo giờ)" : "Full-time (Lương cứng)")}
+                  </span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
+                  <span style={{ color: "#64748b", fontSize: "0.85rem" }}>Cơ chế tính lương:</span>
+                  <span style={{ fontWeight: 600, color: "#334155" }}>
+                    {handoverData.hinhThucLuong || (handoverData.loaiNhanVien === "Part-time" ? "Lương theo giờ" : "Lương cứng theo tháng")}
+                    {handoverData.mucLuong ? ` (${Number(handoverData.mucLuong).toLocaleString("vi-VN")} đ)` : ""}
+                  </span>
+                </div>
 
                 <div
                   style={{
@@ -941,6 +1061,22 @@ export default function EmployeeManagement() {
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
+
+                {handoverData.congThucTinhLuong && (
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      padding: "8px 12px",
+                      backgroundColor: "#f1f5f9",
+                      borderRadius: "6px",
+                      fontSize: "0.8rem",
+                      color: "#334155",
+                      borderLeft: "3px solid #6366f1",
+                    }}
+                  >
+                    📐 <strong>Quy tắc tính lương (Sprint sau):</strong> {handoverData.congThucTinhLuong}
+                  </div>
+                )}
               </div>
 
               {/* Ghi chú hướng dẫn an toàn */}
