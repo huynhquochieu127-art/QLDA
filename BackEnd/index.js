@@ -8,6 +8,7 @@ const mysql = require("mysql2/promise");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const employeeRoutes = require("./routes/employeeRoutes");
+const leaveRequestRoutes = require("./routes/leaveRequestRoutes");
 
 const app = express();
 const httpServer = http.createServer(app); // Tạo HTTP Server từ Express
@@ -28,6 +29,8 @@ io.on("connection", (socket) => {
 app.use(cors());
 app.use(express.json());
 app.use("/api", employeeRoutes);
+app.use("/api/leave-requests", leaveRequestRoutes);
+app.use("/api/don-xin-nghi", leaveRequestRoutes);
 
 // Lấy Secret Key từ .env hoặc fallback
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_key";
