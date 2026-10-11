@@ -9,13 +9,6 @@ import CategoryManagement from "../components/CategoryManagement";
 import ProductManagement from "../components/ProductManagement";
 import OrderManagement from "../components/OrderManagement";
 import EmployeeManagement from "../components/EmployeeManagement";
-import ShiftApprovalManagement from "../components/ShiftApprovalManagement";
-import CustomerManagement from "../components/CustomerManagement";
-import TimekeepingManagement from "../components/TimekeepingManagement";
-import LeaveRequestManagement from "../components/LeaveRequestManagement";
-import AiInsightsManagement from "../components/AiInsightsManagement";
-
-// Lucide Icons
 import {
   Clock,
   User,
@@ -326,6 +319,26 @@ export default function Home() {
               <p>Sẵn sàng kết nối MySQL cho phân hệ này.</p>
             </div>
           )}
+
+          {/* TAB QUẢN LÝ NHÂN SỰ & PHÂN QUYỀN */}
+          {activeTab === "hr" && <EmployeeManagement />}
+
+          {/* TAB PLACEHOLDER DÀNH CHO CÁC PHÂN HỆ KHÁC */}
+          {activeTab !== "pos" &&
+            activeTab !== "orders" &&
+            activeTab !== "customers" &&
+            activeTab !== "categories" &&
+            activeTab !== "inventory" &&
+            activeTab !== "tables" &&
+            activeTab !== "hr" && (
+              <div className="tab-placeholder">
+                <Coffee size={28} className="placeholder-icon" />
+                <h2>
+                  Phân hệ: {menuList.find((m) => m.id === activeTab)?.label}
+                </h2>
+                <p>Sẵn sàng kết nối MySQL cho phân hệ này.</p>
+              </div>
+            )}
         </div>
       </main>
     </div>

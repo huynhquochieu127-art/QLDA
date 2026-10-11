@@ -6,6 +6,8 @@ const { Server } = require("socket.io"); // Socket.IO
 const cors = require("cors");
 const mysql = require("mysql2/promise");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
+const employeeRoutes = require("./routes/employeeRoutes");
 
 const app = express();
 const httpServer = http.createServer(app); // Tạo HTTP Server từ Express
@@ -25,6 +27,7 @@ io.on("connection", (socket) => {
 
 app.use(cors());
 app.use(express.json());
+app.use("/api", employeeRoutes);
 
 // Lấy Secret Key từ .env hoặc fallback
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_key";
@@ -48,6 +51,14 @@ app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập đầy đủ email và mật khẩu!",
+      });
+    }
+
+    // 1. Kiểm tra tài khoản test tĩnh (nếu có)
     if (email === "admin@gmail.com" && password === "123456") {
       const user = {
         id: 1,
@@ -55,7 +66,7 @@ app.post("/api/login", async (req, res) => {
         role: "admin",
         name: "Admin",
       };
-      const accessToken = jwt.sign(user, JWT_SECRET, { expiresIn: "1h" });
+      const accessToken = jwt.sign(user, JWT_SECRET, { expiresIn: "24h" });
 
       return res.json({
         success: true,
@@ -65,10 +76,70 @@ app.post("/api/login", async (req, res) => {
       });
     }
 
-    return res
-      .status(401)
-      .json({ success: false, message: "Sai email hoặc mật khẩu!" });
+    // 2. Tra cứu tài khoản trong cơ sở dữ liệu MySQL (bảng taikhoan + vaitro + nhanvien)
+    const [users] = await db.query(
+      `SELECT tk.*, vt.TenVaiTro, nv.MaNhanVien, nv.MaNhanVienCode, nv.ChucVu
+       FROM taikhoan tk
+       LEFT JOIN vaitro vt ON tk.MaVaiTro = vt.MaVaiTro
+       LEFT JOIN nhanvien nv ON tk.MaTaiKhoan = nv.MaTaiKhoan
+       WHERE tk.Email = ?`,
+      [email.trim()]
+    );
+
+    if (users.length === 0) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Sai email hoặc mật khẩu!" });
+    }
+
+    const userRecord = users[0];
+
+    // Kiểm tra trạng thái hoạt động của tài khoản
+    if (userRecord.TrangThaiHoatDong === 0) {
+      return res.status(403).json({
+        success: false,
+        message: "Tài khoản này đã bị khóa hoặc ngừng hoạt động!",
+      });
+    }
+
+    // So khớp mật khẩu: hỗ trợ Bcrypt hash ($2b$, $2a$) hoặc plaintext cũ
+    let isMatch = false;
+    if (userRecord.MatKhau && userRecord.MatKhau.startsWith("$2")) {
+      isMatch = await bcrypt.compare(password, userRecord.MatKhau);
+    } else {
+      isMatch = password === userRecord.MatKhau;
+    }
+
+    if (!isMatch) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Sai email hoặc mật khẩu!" });
+    }
+
+    // Tạo JWT token
+    const userPayload = {
+      id: userRecord.MaTaiKhoan,
+      maNhanVien: userRecord.MaNhanVien,
+      maNhanVienCode: userRecord.MaNhanVienCode,
+      email: userRecord.Email,
+      name: userRecord.HoTen,
+      role: userRecord.TenVaiTro || "Nhân viên",
+      maVaiTro: userRecord.MaVaiTro,
+      chucVu: userRecord.ChucVu,
+    };
+
+    const accessToken = jwt.sign(userPayload, JWT_SECRET, {
+      expiresIn: "24h",
+    });
+
+    return res.json({
+      success: true,
+      message: "Đăng nhập thành công!",
+      user: userPayload,
+      accessToken: accessToken,
+    });
   } catch (error) {
+    console.error("Lỗi đăng nhập:", error);
     res
       .status(500)
       .json({ success: false, message: "Lỗi server: " + error.message });
