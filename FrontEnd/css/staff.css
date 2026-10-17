@@ -639,3 +639,204 @@
 
 .onduty-name { font-weight: 700; font-size: 0.92rem; }
 .onduty-meta { color: #64748b; font-size: 0.78rem; }
+
+/* ==========================================================================
+   WIDGET CẢNH BÁO ĐI TRỄ (MÀU CAM / ĐỎ NỔI BẬT TRÊN DASHBOARD)
+   ========================================================================== */
+.late-widget-container {
+  background: linear-gradient(135deg, #fff7ed 0%, #fff1f2 100%);
+  border: 2px solid #ea580c;
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-bottom: 24px;
+  box-shadow: 0 10px 25px -5px rgba(234, 88, 12, 0.15), 0 8px 10px -6px rgba(239, 68, 68, 0.1);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.late-widget-container::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 100%;
+  background: linear-gradient(to bottom, #f97316, #ef4444);
+}
+
+.late-widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed #fdba74;
+}
+
+.late-widget-title-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.late-icon-badge {
+  background: #fee2e2;
+  color: #dc2626;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+  animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  70% { transform: scale(1.04); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.late-widget-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #991b1b;
+  letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.late-widget-sub {
+  margin: 3px 0 0;
+  font-size: 0.84rem;
+  color: #9a3412;
+  font-weight: 500;
+}
+
+.late-count-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 20px;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
+}
+
+.late-card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.late-staff-card {
+  background: #ffffff;
+  border: 1.5px solid #fed7aa;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+}
+
+.late-staff-card:hover {
+  border-color: #f97316;
+  box-shadow: 0 6px 16px rgba(249, 115, 22, 0.16);
+  transform: translateY(-2px);
+}
+
+.late-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f97316, #ef4444);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 3px 8px rgba(234, 88, 12, 0.25);
+}
+
+.late-info-col {
+  min-width: 0;
+  flex: 1;
+}
+
+.late-staff-name {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.late-staff-meta {
+  font-size: 0.8rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.late-time-compare {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.late-tag-box {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.late-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fee2e2;
+  border: 1px solid #f87171;
+  color: #b91c1c;
+  font-weight: 800;
+  font-size: 0.82rem;
+  padding: 4px 10px;
+  border-radius: 14px;
+  white-space: nowrap;
+}
+
+.late-empty-good {
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #166534;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
