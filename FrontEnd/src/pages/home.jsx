@@ -14,6 +14,7 @@ import TimekeepingManagement from "../components/TimekeepingManagement";
 import LeaveRequestManagement from "../components/LeaveRequestManagement";
 import AiInsightsManagement from "../components/AiInsightsManagement";
 import ShiftApprovalManagement from "../components/ShiftApprovalManagement";
+import EmployeeCheckIn from "../components/EmployeeCheckIn";
 import ShiftRegistration from "../components/ShiftRegistration";
 import MyLeaveRequests from "../components/MyLeaveRequests";
 import {
@@ -35,6 +36,7 @@ import {
   FileText,
   CheckSquare,
   FileSpreadsheet,
+  LogIn,
 } from "lucide-react";
 
 export default function Home() {
@@ -77,11 +79,9 @@ export default function Home() {
   const getDefaultTab = (role) => {
     switch (role) {
       case "barista":
-        return "inventory";
       case "waiter":
-        return "tables";
       case "cashier":
-        return "pos";
+        return "my_checkin"; // Trang chủ nhân viên: nút Check-in / Check-out (QH-47)
       default:
         return "dashboard";
     }
@@ -150,6 +150,12 @@ export default function Home() {
       label: "Quản lý Đồ Uống & Thực Đơn",
       icon: <Package size={18} />,
       roles: ["admin", "manager", "barista"],
+    },
+    {
+      id: "my_checkin",
+      label: "Chấm công hôm nay",
+      icon: <LogIn size={18} />,
+      roles: ["manager", "cashier", "barista", "waiter"],
     },
     {
       id: "my_shifts",
@@ -319,6 +325,8 @@ export default function Home() {
             ) : (
               <MyLeaveRequests />
             ))}
+
+          {activeTab === "my_checkin" && <EmployeeCheckIn />}
 
           {activeTab === "my_shifts" && <ShiftRegistration />}
 
