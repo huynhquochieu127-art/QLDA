@@ -1,14 +1,19 @@
 import React, { useState, useEffect, useMemo } from "react";
+import axios from "axios";
 import {
   LogIn,
   LogOut,
   CheckCircle2,
   Clock,
+  HelpCircle,
   History,
+  FileClock,
   X,
 } from "lucide-react";
 import "../../css/staff.css";
+import AttendanceSupplementForm from "./AttendanceSupplementForm";
 import {
+  API_BASE,
   SHIFTS,
   getShift,
   toDateKey,
@@ -24,6 +29,12 @@ import {
 // Cho phép check-in sớm tối đa 30 phút trước giờ vào ca
 const EARLY_CHECKIN_MINUTES = 30;
 
+const STATUS_LABELS = {
+  pending: { text: "Chờ duyệt", cls: "sw-badge-pending" },
+  approved: { text: "Đã duyệt", cls: "sw-badge-approved" },
+  rejected: { text: "Từ chối", cls: "sw-badge-rejected" },
+};
+
 // QH-47: Nút Check-in / Check-out trên trang chủ của nhân viên
 export default function EmployeeCheckIn() {
   const user = useMemo(() => getCurrentUser(), []);
@@ -32,10 +43,31 @@ export default function EmployeeCheckIn() {
   const [processing, setProcessing] = useState(false);
   const [notice, setNotice] = useState(null);
 
+  // QH-49: Yêu cầu bổ sung điểm danh
+  const [showSupplementForm, setShowSupplementForm] = useState(false);
+  const [serverRequests, setServerRequests] = useState([]);
+  const [localRequests, setLocalRequests] = useState(() =>
+    readLocal(STORAGE_KEYS.attendanceRequests).filter((r) => r.staffId === user.staffId)
+  );
+
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Tải các yêu cầu bổ sung điểm danh của chính nhân viên này từ backend (nếu có)
+  useEffect(() => {
+    if (!user.maNhanVien) return;
+    axios
+      .get(`${API_BASE}/yeucau-chamcong`, { params: { status: "all" } })
+      .then((res) => {
+        const list = (res.data?.data || []).filter(
+          (r) => String(r.MaNhanVien) === String(user.maNhanVien)
+        );
+        setServerRequests(list);
+      })
+      .catch(() => {});
+  }, [user.maNhanVien]);
 
   const todayKey = toDateKey(now);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
@@ -104,6 +136,32 @@ export default function EmployeeCheckIn() {
     setProcessing(false);
   };
 
+  const handleSupplementSubmitted = (record) => {
+    setShowSupplementForm(false);
+    setLocalRequests((prev) => [record, ...prev]);
+    setNotice({
+      type: "success",
+      text: record.synced
+        ? "Đã gửi yêu cầu bổ sung điểm danh. Vui lòng chờ Quản lý duyệt."
+        : "Đã ghi nhận yêu cầu bổ sung điểm danh (Chờ duyệt). Máy chủ chưa sẵn sàng nên yêu cầu đang lưu tạm trên máy này.",
+    });
+  };
+
+  // Gộp danh sách yêu cầu: từ máy chủ + các yêu cầu lưu tạm chưa gửi được
+  const myRequests = [
+    ...serverRequests.map((r) => ({
+      id: `SV-${r.MaYeuCau}`,
+      ngay: r.Ngay,
+      caLam: r.CaLam,
+      loai: r.Loai,
+      thoiGian: r.ThoiGian,
+      lyDo: r.LyDo,
+      trangThai: r.TrangThai,
+      synced: true,
+    })),
+    ...localRequests.filter((r) => !r.synced),
+  ];
+
   const renderShiftLabel = (shift) => `${shift.name} (${shift.start} - ${shift.end})`;
 
   return (
@@ -117,6 +175,9 @@ export default function EmployeeCheckIn() {
             Xin chào <strong>{user.name}</strong> · {user.position}
           </p>
         </div>
+        <button className="sw-btn sw-btn-warning" onClick={() => setShowSupplementForm(true)}>
+          <HelpCircle size={16} /> Quên điểm danh?
+        </button>
       </div>
 
       {notice && (
@@ -238,6 +299,60 @@ export default function EmployeeCheckIn() {
           )}
         </div>
       </div>
+
+      {/* QH-49: DANH SÁCH YÊU CẦU BỔ SUNG ĐIỂM DANH CỦA TÔI */}
+      <div className="sw-card">
+        <h3 className="sw-card-title">
+          <FileClock size={18} /> Yêu cầu bổ sung điểm danh của tôi
+        </h3>
+        {myRequests.length === 0 ? (
+          <div className="sw-empty">
+            Bạn chưa gửi yêu cầu nào. Nếu quên check-in, bấm nút <strong>"Quên điểm danh?"</strong> ở
+            góc trên.
+          </div>
+        ) : (
+          <div className="sw-table-wrap">
+            <table className="sw-table">
+              <thead>
+                <tr>
+                  <th>Ngày</th>
+                  <th>Ca</th>
+                  <th>Loại</th>
+                  <th>Giờ thực tế</th>
+                  <th>Lý do</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myRequests.map((r) => {
+                  const status = STATUS_LABELS[r.trangThai] || STATUS_LABELS.pending;
+                  return (
+                    <tr key={r.id}>
+                      <td>{r.ngay ? formatDateVN(r.ngay) : "-"}</td>
+                      <td>{r.caLam}</td>
+                      <td>{r.loai || "-"}</td>
+                      <td>{r.thoiGian || "-"}</td>
+                      <td style={{ maxWidth: 280 }}>{r.lyDo}</td>
+                      <td>
+                        <span className={`sw-badge ${status.cls}`}>{status.text}</span>
+                        {!r.synced && <div className="sw-hint">Lưu tạm, chưa gửi máy chủ</div>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {showSupplementForm && (
+        <AttendanceSupplementForm
+          user={user}
+          onClose={() => setShowSupplementForm(false)}
+          onSubmitted={handleSupplementSubmitted}
+        />
+      )}
     </div>
   );
 }
