@@ -18,6 +18,7 @@ import EmployeeCheckIn from "../components/EmployeeCheckIn";
 import ShiftRegistration from "../components/ShiftRegistration";
 import MyLeaveRequests from "../components/MyLeaveRequests";
 import MyTimesheet from "../components/MyTimesheet";
+import Payslip from "../components/Payslip";
 import {
   Clock,
   User,
@@ -38,6 +39,7 @@ import {
   CheckSquare,
   FileSpreadsheet,
   ClipboardCheck,
+  Receipt,
   LogIn,
 } from "lucide-react";
 
@@ -169,6 +171,12 @@ export default function Home() {
       id: "my_timesheet",
       label: "Bảng công của tôi",
       icon: <ClipboardCheck size={18} />,
+      roles: ["manager", "cashier", "barista", "waiter"],
+    },
+    {
+      id: "my_payslip",
+      label: "Phiếu lương",
+      icon: <Receipt size={18} />,
       roles: ["manager", "cashier", "barista", "waiter"],
     },
     {
@@ -339,6 +347,8 @@ export default function Home() {
           {activeTab === "my_shifts" && <ShiftRegistration />}
 
           {activeTab === "my_timesheet" && <MyTimesheet />}
+
+          {activeTab === "my_payslip" && <Payslip />}
 
           {activeTab === "ai" && <AiInsightsManagement />}
 
