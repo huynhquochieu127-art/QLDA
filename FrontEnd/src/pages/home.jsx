@@ -20,6 +20,7 @@ import MyLeaveRequests from "../components/MyLeaveRequests";
 import MyTimesheet from "../components/MyTimesheet";
 import Payslip from "../components/Payslip";
 import RevenueReport from "../components/RevenueReport";
+import WorkingStaffPanel from "../components/WorkingStaffPanel";
 import {
   Clock,
   User,
@@ -351,6 +352,8 @@ export default function Home() {
 
           {activeTab === "my_payslip" && <Payslip />}
 
+          {activeTab === "dashboard" && <WorkingStaffPanel />}
+
           {activeTab === "reports" && <RevenueReport />}
 
           {activeTab === "ai" && <AiInsightsManagement />}
@@ -364,7 +367,7 @@ export default function Home() {
           )}
 
           {/* PLACEHOLDER DÀNH CHO CÁC TAB CHƯA CÓ TRANG */}
-          {["dashboard", "settings"].includes(activeTab) && (
+          {["settings"].includes(activeTab) && (
             <div className="tab-placeholder">
               <Coffee size={28} className="placeholder-icon" />
               <h2>
