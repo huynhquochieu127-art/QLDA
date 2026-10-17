@@ -17,6 +17,7 @@ import ShiftApprovalManagement from "../components/ShiftApprovalManagement";
 import EmployeeCheckIn from "../components/EmployeeCheckIn";
 import ShiftRegistration from "../components/ShiftRegistration";
 import MyLeaveRequests from "../components/MyLeaveRequests";
+import MyTimesheet from "../components/MyTimesheet";
 import {
   Clock,
   User,
@@ -36,6 +37,7 @@ import {
   FileText,
   CheckSquare,
   FileSpreadsheet,
+  ClipboardCheck,
   LogIn,
 } from "lucide-react";
 
@@ -161,6 +163,12 @@ export default function Home() {
       id: "my_shifts",
       label: "Đăng ký ca làm",
       icon: <Calendar size={18} />,
+      roles: ["manager", "cashier", "barista", "waiter"],
+    },
+    {
+      id: "my_timesheet",
+      label: "Bảng công của tôi",
+      icon: <ClipboardCheck size={18} />,
       roles: ["manager", "cashier", "barista", "waiter"],
     },
     {
@@ -329,6 +337,8 @@ export default function Home() {
           {activeTab === "my_checkin" && <EmployeeCheckIn />}
 
           {activeTab === "my_shifts" && <ShiftRegistration />}
+
+          {activeTab === "my_timesheet" && <MyTimesheet />}
 
           {activeTab === "ai" && <AiInsightsManagement />}
 
