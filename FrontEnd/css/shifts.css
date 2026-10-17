@@ -744,3 +744,22 @@
     justify-content: space-between;
   }
 }
+
+/* ==========================================================================
+   Các class dùng chung trước đây nằm trong employee.css (file này không còn
+   được import sau khi màn hình Nhân sự viết lại) - khai báo lại cho màn hình ca
+   ========================================================================== */
+.shifts-container .filter-select { padding: 9px 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; background: #fff; color: #374151; outline: none; cursor: pointer; }
+.shifts-container .filter-select:focus { border-color: #2563eb; }
+.shifts-container .emp-name-cell { display: flex; align-items: center; gap: 12px; }
+.shifts-container .emp-actions { display: flex; align-items: center; gap: 8px; }
+.shifts-container .btn-icon-action { width: 32px; height: 32px; border-radius: 6px; border: 1px solid #e5e7eb; background: #fff; display: flex; align-items: center; justify-content: center; color: #6b7280; cursor: pointer; transition: all 0.15s; }
+.shifts-container .btn-icon-action:hover { background: #f3f4f6; color: #111827; }
+.shifts-container .btn-icon-action.delete:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+.shifts-container .emp-modal-close { background: transparent; border: none; color: #94a3b8; cursor: pointer; padding: 6px; border-radius: 8px; transition: all 0.15s; }
+.shifts-container .emp-modal-close:hover { background: #e2e8f0; color: #0f172a; }
+.shifts-container .form-banner-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; }
+.shifts-container .btn-secondary-action { padding: 9px 18px; border: 1px solid #cbd5e1; border-radius: 8px; background: #ffffff; color: #475569; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.shifts-container .btn-secondary-action:hover { background: #f1f5f9; color: #0f172a; }
+.shifts-container .btn-submit-save { display: flex; align-items: center; gap: 8px; padding: 9px 22px; border: none; border-radius: 8px; background: #2563eb; color: #ffffff; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.shifts-container .btn-submit-save:hover { background: #1d4ed8; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.25); }

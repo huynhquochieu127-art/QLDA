@@ -14,6 +14,13 @@ import TimekeepingManagement from "../components/TimekeepingManagement";
 import LeaveRequestManagement from "../components/LeaveRequestManagement";
 import AiInsightsManagement from "../components/AiInsightsManagement";
 import ShiftApprovalManagement from "../components/ShiftApprovalManagement";
+import EmployeeCheckIn from "../components/EmployeeCheckIn";
+import ShiftRegistration from "../components/ShiftRegistration";
+import MyLeaveRequests from "../components/MyLeaveRequests";
+import MyTimesheet from "../components/MyTimesheet";
+import Payslip from "../components/Payslip";
+import RevenueReport from "../components/RevenueReport";
+import WorkingStaffPanel from "../components/WorkingStaffPanel";
 import {
   Clock,
   User,
@@ -33,6 +40,9 @@ import {
   FileText,
   CheckSquare,
   FileSpreadsheet,
+  ClipboardCheck,
+  Receipt,
+  LogIn,
 } from "lucide-react";
 
 export default function Home() {
@@ -75,11 +85,9 @@ export default function Home() {
   const getDefaultTab = (role) => {
     switch (role) {
       case "barista":
-        return "inventory";
       case "waiter":
-        return "tables";
       case "cashier":
-        return "pos";
+        return "my_checkin"; // Trang chủ nhân viên: nút Check-in / Check-out (QH-47)
       default:
         return "dashboard";
     }
@@ -148,6 +156,30 @@ export default function Home() {
       label: "Quản lý Đồ Uống & Thực Đơn",
       icon: <Package size={18} />,
       roles: ["admin", "manager", "barista"],
+    },
+    {
+      id: "my_checkin",
+      label: "Chấm công hôm nay",
+      icon: <LogIn size={18} />,
+      roles: ["manager", "cashier", "barista", "waiter"],
+    },
+    {
+      id: "my_shifts",
+      label: "Đăng ký ca làm",
+      icon: <Calendar size={18} />,
+      roles: ["manager", "cashier", "barista", "waiter"],
+    },
+    {
+      id: "my_timesheet",
+      label: "Bảng công của tôi",
+      icon: <ClipboardCheck size={18} />,
+      roles: ["manager", "cashier", "barista", "waiter"],
+    },
+    {
+      id: "my_payslip",
+      label: "Phiếu lương",
+      icon: <Receipt size={18} />,
+      roles: ["manager", "cashier", "barista", "waiter"],
     },
     {
       id: "timekeeping",
@@ -302,12 +334,27 @@ export default function Home() {
 
           {activeTab === "timekeeping" && <TimekeepingManagement />}
 
-          {activeTab === "leave_requests" && (
-            <LeaveRequestManagement
-              currentRole={currentRole}
-              onNavigateTab={setActiveTab}
-            />
-          )}
+          {activeTab === "leave_requests" &&
+            (["admin", "manager"].includes(currentRole) ? (
+              <LeaveRequestManagement
+                currentRole={currentRole}
+                onNavigateTab={setActiveTab}
+              />
+            ) : (
+              <MyLeaveRequests />
+            ))}
+
+          {activeTab === "my_checkin" && <EmployeeCheckIn />}
+
+          {activeTab === "my_shifts" && <ShiftRegistration />}
+
+          {activeTab === "my_timesheet" && <MyTimesheet />}
+
+          {activeTab === "my_payslip" && <Payslip />}
+
+          {activeTab === "dashboard" && <WorkingStaffPanel />}
+
+          {activeTab === "reports" && <RevenueReport />}
 
           {activeTab === "ai" && <AiInsightsManagement />}
 
@@ -320,7 +367,7 @@ export default function Home() {
           )}
 
           {/* PLACEHOLDER DÀNH CHO CÁC TAB CHƯA CÓ TRANG */}
-          {["dashboard", "reports", "settings"].includes(activeTab) && (
+          {["settings"].includes(activeTab) && (
             <div className="tab-placeholder">
               <Coffee size={28} className="placeholder-icon" />
               <h2>
