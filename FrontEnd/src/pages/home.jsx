@@ -15,6 +15,7 @@ import LeaveRequestManagement from "../components/LeaveRequestManagement";
 import AiInsightsManagement from "../components/AiInsightsManagement";
 import ShiftApprovalManagement from "../components/ShiftApprovalManagement";
 import ShiftRegistration from "../components/ShiftRegistration";
+import MyLeaveRequests from "../components/MyLeaveRequests";
 import {
   Clock,
   User,
@@ -309,12 +310,15 @@ export default function Home() {
 
           {activeTab === "timekeeping" && <TimekeepingManagement />}
 
-          {activeTab === "leave_requests" && (
-            <LeaveRequestManagement
-              currentRole={currentRole}
-              onNavigateTab={setActiveTab}
-            />
-          )}
+          {activeTab === "leave_requests" &&
+            (["admin", "manager"].includes(currentRole) ? (
+              <LeaveRequestManagement
+                currentRole={currentRole}
+                onNavigateTab={setActiveTab}
+              />
+            ) : (
+              <MyLeaveRequests />
+            ))}
 
           {activeTab === "my_shifts" && <ShiftRegistration />}
 
