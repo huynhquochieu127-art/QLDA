@@ -32,6 +32,9 @@ app.use("/api", employeeRoutes);
 app.use("/api/leave-requests", leaveRequestRoutes);
 app.use("/api/don-xin-nghi", leaveRequestRoutes);
 
+const timekeepingRoutes = require("./routes/timekeeping");
+app.use("/api", timekeepingRoutes);
+
 // Lấy Secret Key từ .env hoặc fallback
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_key";
 

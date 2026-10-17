@@ -102,6 +102,7 @@ export default function EmployeeCheckIn() {
   const handleCheckIn = () => {
     setProcessing(true);
     const lateMinutes = Math.max(0, nowMinutes - timeToMinutes(currentShift.start));
+    const isLate = lateMinutes > 0;
     const record = {
       id: `CI-${Date.now()}`,
       staffId: user.staffId,
@@ -109,17 +110,31 @@ export default function EmployeeCheckIn() {
       position: user.position,
       dateKey: todayKey,
       shiftType: currentShift.id,
+      shiftName: currentShift.name,
+      shiftStart: currentShift.start,
+      shiftEnd: currentShift.end,
       checkIn: new Date().toISOString(),
       checkOut: null,
+      isLate,
       lateMinutes,
     };
     saveCheckins([record, ...checkins]);
+
+    // Đồng bộ với Backend MySQL nếu có mã nhân viên
+    if (user.maNhanVien) {
+      axios
+        .post(`${API_BASE}/timekeeping/checkin`, {
+          maNhanVien: user.maNhanVien,
+          gioCheckIn: record.checkIn,
+        })
+        .catch(() => {});
+    }
+
     setNotice({
-      type: lateMinutes > 0 ? "warning" : "success",
-      text:
-        lateMinutes > 0
-          ? `Check-in ${currentShift.name} thành công lúc ${formatTime(record.checkIn)} (trễ ${lateMinutes} phút).`
-          : `Check-in ${currentShift.name} thành công lúc ${formatTime(record.checkIn)}. Chúc bạn làm việc vui vẻ!`,
+      type: isLate ? "warning" : "success",
+      text: isLate
+        ? `CẢNH BÁO: Check-in ${currentShift.name} lúc ${formatTime(record.checkIn)} (trễ ${lateMinutes} phút so với giờ bắt đầu ${currentShift.start}).`
+        : `Check-in ${currentShift.name} thành công đúng giờ lúc ${formatTime(record.checkIn)}. Chúc bạn làm việc vui vẻ!`,
     });
     setProcessing(false);
   };
