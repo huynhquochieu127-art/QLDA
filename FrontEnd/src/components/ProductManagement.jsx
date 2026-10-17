@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { Plus, Trash2, Edit, Loader2, X, Coffee } from "lucide-react";
+import { Plus, Trash2, Edit, Loader2, X, Coffee, CheckCircle2 } from "lucide-react";
 
 const formatPrice = (p) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(p);
@@ -26,6 +26,11 @@ export default function ProductManagement({ currentRole }) {
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [formError, setFormError] = useState("");
+
+  // Thông báo & tô sáng món vừa thêm (QH-67)
+  const [notice, setNotice] = useState("");
+  const [highlightId, setHighlightId] = useState(null);
 
   // Lấy danh sách danh mục (dùng cho dropdown)
   const fetchCategories = async () => {
@@ -63,6 +68,7 @@ export default function ProductManagement({ currentRole }) {
   const openAdd = () => {
     setEditingProduct(null);
     setForm(EMPTY_FORM);
+    setFormError("");
     setShowModal(true);
   };
 
@@ -80,16 +86,22 @@ export default function ProductManagement({ currentRole }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!form.tenSanPham || form.gia === "") {
-      return alert("Vui lòng nhập Tên và Giá!");
+    if (!form.tenSanPham.trim() || form.gia === "") {
+      return setFormError("Vui lòng nhập Tên và Giá!");
     }
+    if (Number(form.gia) <= 0) {
+      return setFormError("Giá món phải lớn hơn 0.");
+    }
+    setFormError("");
     try {
       if (editingProduct) {
         await axios.put(`http://localhost:5000/api/products/${editingProduct.MaSanPham}`, form);
         alert("Cập nhật thành công!");
       } else {
-        await axios.post("http://localhost:5000/api/products", form);
-        alert("Thêm sản phẩm thành công!");
+        const res = await axios.post("http://localhost:5000/api/products", form);
+        setNotice(`Đã thêm món mới "${form.tenSanPham.trim()}" vào thực đơn.`);
+        setHighlightId(res.data?.id ?? null);
+        setTimeout(() => setHighlightId(null), 4000);
       }
       setShowModal(false);
       fetchProducts(filterCat);
@@ -120,11 +132,47 @@ export default function ProductManagement({ currentRole }) {
           <p className="page-subtitle">Thêm, sửa, xóa các món trong thực đơn</p>
         </div>
         {canEdit && (
-          <button className="btn-add-customer" onClick={openAdd}>
-            <Plus size={18} /> Thêm Đồ Uống
+          <button
+            className="btn-add-customer"
+            onClick={openAdd}
+            style={{
+              padding: "12px 22px",
+              fontSize: "15px",
+              boxShadow: "0 4px 12px rgba(37, 99, 235, 0.35)",
+            }}
+          >
+            <Plus size={20} /> Thêm món mới
           </button>
         )}
       </div>
+
+      {/* Thông báo thêm món thành công (QH-67) */}
+      {notice && (
+        <div
+          style={{
+            marginBottom: "16px",
+            padding: "10px 14px",
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            color: "#166534",
+            borderRadius: "8px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            fontSize: "14px",
+          }}
+        >
+          <CheckCircle2 size={18} />
+          <span>{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice("")}
+            style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#166534" }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Lọc theo danh mục */}
       <div style={{ marginBottom: "16px" }}>
@@ -174,7 +222,14 @@ export default function ProductManagement({ currentRole }) {
               </tr>
             ) : products.length > 0 ? (
               products.map((p) => (
-                <tr key={p.MaSanPham}>
+                <tr
+                  key={p.MaSanPham}
+                  style={
+                    highlightId !== null && String(p.MaSanPham) === String(highlightId)
+                      ? { backgroundColor: "#ecfdf5", transition: "background-color 0.6s" }
+                      : { transition: "background-color 0.6s" }
+                  }
+                >
                   <td><strong>#{p.MaSanPham}</strong></td>
                   <td>
                     <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -239,6 +294,20 @@ export default function ProductManagement({ currentRole }) {
               </button>
             </div>
             <form onSubmit={handleSave}>
+              {formError && (
+                <div
+                  style={{
+                    marginBottom: "12px",
+                    padding: "8px 12px",
+                    background: "#fef2f2",
+                    color: "#b91c1c",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                  }}
+                >
+                  {formError}
+                </div>
+              )}
               <div className="form-group">
                 <label>Tên đồ uống (*)</label>
                 <input
