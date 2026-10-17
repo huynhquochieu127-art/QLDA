@@ -21,7 +21,11 @@ import {
   MapPin,
   X,
   Loader2,
+  Pencil,
+  Lock,
+  Unlock,
 } from "lucide-react";
+import { EmployeeDetailModal, EmployeeEditModal } from "./EmployeeActionModals";
 
 const API_BASE = "http://localhost:5000/api";
 
@@ -150,6 +154,10 @@ export default function EmployeeManagement() {
   const [salaryError, setSalaryError] = useState("");
   const [actionNotice, setActionNotice] = useState("");
 
+  // Xem chi tiết / Chỉnh sửa nhân viên (QH-18)
+  const [detailEmployee, setDetailEmployee] = useState(null);
+  const [editEmployee, setEditEmployee] = useState(null);
+
   // Lấy danh sách nhân viên
   const fetchEmployees = async (searchTerm = "") => {
     setLoading(true);
@@ -263,6 +271,24 @@ export default function EmployeeManagement() {
       );
     } finally {
       setSavingSalary(false);
+    }
+  };
+
+  // Khóa / Mở khóa tài khoản đăng nhập của nhân viên (QH-18)
+  const handleToggleLock = async (emp) => {
+    const isLocked = Number(emp.TrangThaiHoatDong) === 0;
+    const action = isLocked ? "Mở khóa" : "Khóa";
+    if (!window.confirm(`${action} tài khoản của nhân viên "${emp.HoTen}"?`)) return;
+    try {
+      const res = await axios.put(`${API_BASE}/employees/${emp.MaNhanVien}`, {
+        trangThaiHoatDong: isLocked ? 1 : 0,
+      });
+      if (res.data && res.data.success) {
+        setActionNotice(`Đã ${action.toLowerCase()} tài khoản của "${emp.HoTen}".`);
+        fetchEmployees(search);
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || `Không thể ${action.toLowerCase()} tài khoản. Vui lòng thử lại!`);
     }
   };
 
@@ -607,8 +633,43 @@ export default function EmployeeManagement() {
                       />
                       {emp.TrangThai || "Đang làm việc"}
                     </span>
+                    {Number(emp.TrangThaiHoatDong) === 0 && (
+                      <div style={{ fontSize: "0.75rem", color: "#b91c1c", marginTop: "3px", fontWeight: 600 }}>
+                        🔒 Tài khoản bị khóa
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: "12px 16px", textAlign: "right", whiteSpace: "nowrap" }}>
+                    <div style={{ display: "inline-flex", gap: "6px", marginRight: "6px", verticalAlign: "middle" }}>
+                      {[
+                        { title: "Xem chi tiết", icon: <Eye size={15} />, color: "#334155", onClick: () => setDetailEmployee(emp) },
+                        { title: "Chỉnh sửa", icon: <Pencil size={15} />, color: "#2563eb", onClick: () => setEditEmployee(emp) },
+                        Number(emp.TrangThaiHoatDong) === 0
+                          ? { title: "Mở khóa tài khoản", icon: <Unlock size={15} />, color: "#16a34a", onClick: () => handleToggleLock(emp) }
+                          : { title: "Khóa tài khoản", icon: <Lock size={15} />, color: "#dc2626", onClick: () => handleToggleLock(emp) },
+                      ].map((btn) => (
+                        <button
+                          key={btn.title}
+                          type="button"
+                          title={btn.title}
+                          onClick={btn.onClick}
+                          style={{
+                            width: "32px",
+                            height: "32px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            border: "1px solid #e2e8f0",
+                            borderRadius: "6px",
+                            backgroundColor: "#fff",
+                            color: btn.color,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {btn.icon}
+                        </button>
+                      ))}
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleOpenSalary(emp)}
@@ -1102,6 +1163,29 @@ export default function EmployeeManagement() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* MODAL 4 & 5: XEM CHI TIẾT / CHỈNH SỬA NHÂN VIÊN (QH-18) */}
+      {detailEmployee && (
+        <EmployeeDetailModal
+          employee={detailEmployee}
+          onClose={() => setDetailEmployee(null)}
+          onEdit={(emp) => {
+            setDetailEmployee(null);
+            setEditEmployee(emp);
+          }}
+        />
+      )}
+      {editEmployee && (
+        <EmployeeEditModal
+          employee={editEmployee}
+          onClose={() => setEditEmployee(null)}
+          onSaved={(msg) => {
+            setEditEmployee(null);
+            setActionNotice(msg);
+            fetchEmployees(search);
+          }}
+        />
       )}
 
       {/* ========================================================================= */}
