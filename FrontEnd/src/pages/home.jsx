@@ -14,6 +14,7 @@ import TimekeepingManagement from "../components/TimekeepingManagement";
 import LeaveRequestManagement from "../components/LeaveRequestManagement";
 import AiInsightsManagement from "../components/AiInsightsManagement";
 import ShiftApprovalManagement from "../components/ShiftApprovalManagement";
+import ShiftRegistration from "../components/ShiftRegistration";
 import {
   Clock,
   User,
@@ -148,6 +149,12 @@ export default function Home() {
       label: "Quản lý Đồ Uống & Thực Đơn",
       icon: <Package size={18} />,
       roles: ["admin", "manager", "barista"],
+    },
+    {
+      id: "my_shifts",
+      label: "Đăng ký ca làm",
+      icon: <Calendar size={18} />,
+      roles: ["manager", "cashier", "barista", "waiter"],
     },
     {
       id: "timekeeping",
@@ -308,6 +315,8 @@ export default function Home() {
               onNavigateTab={setActiveTab}
             />
           )}
+
+          {activeTab === "my_shifts" && <ShiftRegistration />}
 
           {activeTab === "ai" && <AiInsightsManagement />}
 
