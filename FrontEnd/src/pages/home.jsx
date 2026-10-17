@@ -19,6 +19,7 @@ import ShiftRegistration from "../components/ShiftRegistration";
 import MyLeaveRequests from "../components/MyLeaveRequests";
 import MyTimesheet from "../components/MyTimesheet";
 import Payslip from "../components/Payslip";
+import RevenueReport from "../components/RevenueReport";
 import {
   Clock,
   User,
@@ -350,6 +351,8 @@ export default function Home() {
 
           {activeTab === "my_payslip" && <Payslip />}
 
+          {activeTab === "reports" && <RevenueReport />}
+
           {activeTab === "ai" && <AiInsightsManagement />}
 
           {activeTab === "hr" && (
@@ -361,7 +364,7 @@ export default function Home() {
           )}
 
           {/* PLACEHOLDER DÀNH CHO CÁC TAB CHƯA CÓ TRANG */}
-          {["dashboard", "reports", "settings"].includes(activeTab) && (
+          {["dashboard", "settings"].includes(activeTab) && (
             <div className="tab-placeholder">
               <Coffee size={28} className="placeholder-icon" />
               <h2>
