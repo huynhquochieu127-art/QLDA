@@ -2,6 +2,46 @@ const bcrypt = require("bcrypt");
 const db = require("../config/db");
 
 /**
+ * Tự động đồng bộ và đảm bảo bảng nhanvien có đủ các cột:
+ * - CCCD (VARCHAR 20)
+ * - ChucVu (VARCHAR 50)
+ * - LoaiLuong (VARCHAR 20) ('HOURLY' hoặc 'MONTHLY')
+ * - GhiChu (TEXT)
+ */
+let schemaEnsured = false;
+async function ensureEmployeeSchema(conn) {
+  if (schemaEnsured) return;
+  const target = conn || db;
+  const alterStatements = [
+    "ALTER TABLE nhanvien ADD COLUMN CCCD VARCHAR(20) NULL",
+    "ALTER TABLE nhanvien ADD COLUMN ChucVu VARCHAR(50) NULL",
+    "ALTER TABLE nhanvien ADD COLUMN LoaiLuong VARCHAR(20) DEFAULT 'MONTHLY'",
+    "ALTER TABLE nhanvien ADD COLUMN GhiChu TEXT NULL",
+  ];
+  for (const sql of alterStatements) {
+    try {
+      await target.query(sql);
+    } catch (err) {
+      if (err.errno !== 1060 && err.code !== "ER_DUP_FIELDNAME") {
+        console.warn("Lưu ý migration cột nhanvien:", err.message);
+      }
+    }
+  }
+  // Đồng bộ giá trị LoaiLuong cho các bản ghi cũ nếu chưa có
+  try {
+    await target.query(
+      "UPDATE nhanvien SET LoaiLuong = 'HOURLY', GhiChu = COALESCE(GhiChu, 'HOURLY') WHERE LoaiNhanVien = 'Part-time' AND (LoaiLuong IS NULL OR LoaiLuong != 'HOURLY')"
+    );
+    await target.query(
+      "UPDATE nhanvien SET LoaiLuong = 'MONTHLY' WHERE LoaiNhanVien = 'Full-time' AND (LoaiLuong IS NULL OR LoaiLuong != 'MONTHLY')"
+    );
+  } catch (e) {}
+  schemaEnsured = true;
+}
+// Chạy kiểm tra khởi tạo schema
+ensureEmployeeSchema();
+
+/**
  * Helper: Tạo mã nhân viên tự động NV001, NV002,...
  */
 async function generateEmployeeCode(connection) {
@@ -22,12 +62,13 @@ async function generateEmployeeCode(connection) {
 /**
  * [POST] /api/employees (hoặc /api/users)
  * Nhận toàn bộ dữ liệu từ Form gửi xuống và lưu vào bảng Users/Employees (taikhoan & nhanvien)
- * Bảo mật: Tự động tạo mật khẩu mặc định (6 số cuối CCCD hoặc Cafe@123) và mã hóa Bcrypt trước khi lưu.
- * Trả về thông tin bàn giao cho Admin.
+ * Nếu nhân viên là "Part-time": Lưu mức lương cơ bản theo giờ vào CSDL và ghi chú loại lương là HOURLY.
  */
 exports.createEmployee = async (req, res) => {
   const connection = await db.getConnection();
   try {
+    await ensureEmployeeSchema(connection);
+
     const {
       hoTen,
       name,
@@ -54,6 +95,8 @@ exports.createEmployee = async (req, res) => {
       roleId,
       role,
       password,
+      loaiLuong,
+      ghiChu,
     } = req.body;
 
     // Chuẩn hóa dữ liệu đầu vào từ Form linh hoạt
@@ -64,10 +107,23 @@ exports.createEmployee = async (req, res) => {
     const finalGender = gioiTinh || gender || "Nam";
     const finalAddress = (diaChi || address || "").trim();
     const finalPosition = (chucVu || position || "Nhân viên").trim();
-    // Phân loại hợp đồng: Full-time (Lương cứng) hoặc Part-time (Lương theo giờ)
+
+    // Phân loại hợp đồng: Full-time (Lương cứng) hoặc Part-time (Lương theo giờ HOURLY)
     const rawEmp = (loaiNhanVien || employeeType || "Full-time").toString().trim();
-    const finalEmpType = rawEmp.toLowerCase().includes("part") ? "Part-time" : "Full-time";
-    const finalSalary = luong !== undefined ? Number(luong) : (salary !== undefined ? Number(salary) : 0);
+    const isPartTime =
+      rawEmp.toLowerCase().includes("part") ||
+      (loaiLuong && String(loaiLuong).toUpperCase() === "HOURLY");
+    const finalEmpType = isPartTime ? "Part-time" : "Full-time";
+    const finalLoaiLuong = isPartTime ? "HOURLY" : "MONTHLY";
+
+    const rawSalary = luong !== undefined ? luong : salary;
+    const finalSalary =
+      rawSalary !== undefined && rawSalary !== null && rawSalary !== ""
+        ? Number(String(rawSalary).replace(/[^\d.]/g, ""))
+        : 0;
+
+    // Yêu cầu: Ghi chú loại lương là HOURLY
+    const finalGhiChu = ghiChu ? String(ghiChu).trim() : (isPartTime ? "HOURLY" : "MONTHLY");
 
     // Xác định vai trò (Mặc định 3 = Nhân viên, 2 = Quản lý, 1 = Admin)
     let finalRoleId = 3;
@@ -107,10 +163,6 @@ exports.createEmployee = async (req, res) => {
     }
 
     // 2. Tự động tạo MẬT KHẨU MẶC ĐỊNH
-    // Ưu tiên:
-    // - Nếu có nhập password riêng từ form thì dùng
-    // - Nếu có CCCD (từ 6 số trở lên): lấy 6 số cuối CCCD
-    // - Mặc định hệ thống: "Cafe@123"
     let defaultPassword = "";
     let passwordSource = "";
 
@@ -126,7 +178,7 @@ exports.createEmployee = async (req, res) => {
       passwordSource = "Mật khẩu mặc định hệ thống (Cafe@123)";
     }
 
-    // 3. Mã hóa mật khẩu bằng BCRYPT (Bảo mật theo yêu cầu)
+    // 3. Mã hóa mật khẩu bằng BCRYPT
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(defaultPassword, saltRounds);
 
@@ -157,12 +209,12 @@ exports.createEmployee = async (req, res) => {
     // 4.3. Sinh mã nhân viên tự động (NV001, NV002,...)
     const maNhanVienCode = await generateEmployeeCode(connection);
 
-    // 4.4. Thêm vào bảng nhanvien (Employees)
+    // 4.4. Thêm vào bảng nhanvien (Employees) kèm loại lương HOURLY / MONTHLY và ghi chú
     const [empResult] = await connection.query(
       `INSERT INTO nhanvien (
         MaTaiKhoan, MaNhanVienCode, HoTen, GioiTinh, SoDienThoai, CCCD,
-        DiaChi, ChucVu, LoaiNhanVien, NgayVaoLam, Luong, TrangThai
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        DiaChi, ChucVu, LoaiNhanVien, LoaiLuong, GhiChu, NgayVaoLam, Luong, TrangThai
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         maTaiKhoan,
         maNhanVienCode,
@@ -173,6 +225,8 @@ exports.createEmployee = async (req, res) => {
         finalAddress || null,
         finalPosition,
         finalEmpType,
+        finalLoaiLuong,
+        finalGhiChu,
         ngayVaoLam ? new Date(ngayVaoLam) : new Date(),
         finalSalary,
         "Đang làm việc",
@@ -203,6 +257,8 @@ exports.createEmployee = async (req, res) => {
         vaiTro: tenVaiTro,
         chucVu: finalPosition,
         loaiNhanVien: finalEmpType,
+        loaiLuong: finalLoaiLuong,
+        ghiChu: finalGhiChu,
         loaiHopDong:
           finalEmpType === "Full-time"
             ? "Full-time (Toàn thời gian - Nhận lương cứng)"
@@ -210,8 +266,9 @@ exports.createEmployee = async (req, res) => {
         hinhThucLuong:
           finalEmpType === "Full-time"
             ? "Lương cứng theo tháng"
-            : "Lương theo giờ",
+            : "Lương cơ bản theo giờ (HOURLY)",
         mucLuong: finalSalary,
+        donViLuong: isPartTime ? "VNĐ/giờ" : "VNĐ/tháng",
         congThucTinhLuong:
           finalEmpType === "Full-time"
             ? "Lương thực nhận = Lương cứng hàng tháng + Phụ cấp/Thưởng - Khấu trừ"
@@ -231,9 +288,12 @@ exports.createEmployee = async (req, res) => {
         diaChi: finalAddress,
         chucVu: finalPosition,
         loaiNhanVien: finalEmpType,
+        loaiLuong: finalLoaiLuong,
+        ghiChu: finalGhiChu,
         vaiTro: tenVaiTro,
         maVaiTro: finalRoleId,
         luong: finalSalary,
+        donVi: isPartTime ? "VNĐ/giờ" : "VNĐ/tháng",
         trangThai: "Đang làm việc",
       },
     });
@@ -255,6 +315,7 @@ exports.createEmployee = async (req, res) => {
  */
 exports.getAllEmployees = async (req, res) => {
   try {
+    await ensureEmployeeSchema();
     const search = req.query.search || "";
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 20;
@@ -280,6 +341,8 @@ exports.getAllEmployees = async (req, res) => {
         nv.DiaChi,
         nv.ChucVu,
         nv.LoaiNhanVien,
+        COALESCE(nv.LoaiLuong, IF(nv.LoaiNhanVien = 'Part-time', 'HOURLY', 'MONTHLY')) AS LoaiLuong,
+        COALESCE(nv.GhiChu, IF(nv.LoaiNhanVien = 'Part-time', 'HOURLY', '')) AS GhiChu,
         DATE_FORMAT(nv.NgayVaoLam, '%Y-%m-%d') as NgayVaoLam,
         nv.Luong,
         nv.TrangThai,
@@ -319,10 +382,13 @@ exports.getAllEmployees = async (req, res) => {
  */
 exports.getEmployeeById = async (req, res) => {
   try {
+    await ensureEmployeeSchema();
     const { id } = req.params;
     const [rows] = await db.query(
       `SELECT 
         nv.*,
+        COALESCE(nv.LoaiLuong, IF(nv.LoaiNhanVien = 'Part-time', 'HOURLY', 'MONTHLY')) AS LoaiLuong,
+        COALESCE(nv.GhiChu, IF(nv.LoaiNhanVien = 'Part-time', 'HOURLY', '')) AS GhiChu,
         DATE_FORMAT(nv.NgayVaoLam, '%Y-%m-%d') as NgayVaoLamFormatted,
         tk.Email,
         tk.MaVaiTro,
@@ -350,11 +416,12 @@ exports.getEmployeeById = async (req, res) => {
 
 /**
  * [PUT] /api/employees/:id
- * Cập nhật thông tin nhân viên
+ * Cập nhật thông tin nhân viên (Bao gồm số tiền lương và ghi chú loại lương HOURLY nếu là Part-time)
  */
 exports.updateEmployee = async (req, res) => {
   const connection = await db.getConnection();
   try {
+    await ensureEmployeeSchema(connection);
     const { id } = req.params;
     const {
       hoTen,
@@ -364,8 +431,11 @@ exports.updateEmployee = async (req, res) => {
       diaChi,
       chucVu,
       loaiNhanVien,
+      loaiLuong,
+      ghiChu,
       ngayVaoLam,
       luong,
+      salary,
       trangThai,
       maVaiTro,
       trangThaiHoatDong,
@@ -374,7 +444,7 @@ exports.updateEmployee = async (req, res) => {
     await connection.beginTransaction();
 
     const [empRows] = await connection.query(
-      "SELECT MaTaiKhoan FROM nhanvien WHERE MaNhanVien = ?",
+      "SELECT MaTaiKhoan, LoaiNhanVien, LoaiLuong, GhiChu FROM nhanvien WHERE MaNhanVien = ?",
       [id]
     );
 
@@ -386,7 +456,47 @@ exports.updateEmployee = async (req, res) => {
       });
     }
 
-    const maTaiKhoan = empRows[0].MaTaiKhoan;
+    const currentEmp = empRows[0];
+    const maTaiKhoan = currentEmp.MaTaiKhoan;
+
+    // Xác định loại nhân viên và loại lương
+    let finalLoaiNhanVien = loaiNhanVien !== undefined ? loaiNhanVien : currentEmp.LoaiNhanVien;
+    let isPartTime = false;
+    if (finalLoaiNhanVien) {
+      isPartTime = finalLoaiNhanVien.toLowerCase().includes("part");
+      finalLoaiNhanVien = isPartTime ? "Part-time" : "Full-time";
+    }
+
+    let finalLoaiLuong = loaiLuong;
+    if (!finalLoaiLuong) {
+      if (loaiNhanVien !== undefined) {
+        finalLoaiLuong = isPartTime ? "HOURLY" : "MONTHLY";
+      } else {
+        finalLoaiLuong = currentEmp.LoaiLuong || (isPartTime ? "HOURLY" : "MONTHLY");
+      }
+    } else {
+      if (finalLoaiLuong.toUpperCase() === "HOURLY") {
+        isPartTime = true;
+        finalLoaiNhanVien = "Part-time";
+        finalLoaiLuong = "HOURLY";
+      }
+    }
+
+    // Yêu cầu: Ghi chú loại lương là HOURLY nếu là Part-time
+    let finalGhiChu = ghiChu;
+    if (finalGhiChu === undefined) {
+      if (isPartTime) {
+        finalGhiChu = "HOURLY";
+      } else if (loaiNhanVien !== undefined) {
+        finalGhiChu = "MONTHLY";
+      }
+    }
+
+    const rawSalary = luong !== undefined ? luong : salary;
+    const parsedSalary =
+      rawSalary !== undefined && rawSalary !== null && rawSalary !== ""
+        ? Number(String(rawSalary).replace(/[^\d.]/g, ""))
+        : null;
 
     // Cập nhật bảng nhanvien
     await connection.query(
@@ -398,6 +508,8 @@ exports.updateEmployee = async (req, res) => {
         DiaChi = COALESCE(?, DiaChi),
         ChucVu = COALESCE(?, ChucVu),
         LoaiNhanVien = COALESCE(?, LoaiNhanVien),
+        LoaiLuong = COALESCE(?, LoaiLuong),
+        GhiChu = COALESCE(?, GhiChu),
         NgayVaoLam = COALESCE(?, NgayVaoLam),
         Luong = COALESCE(?, Luong),
         TrangThai = COALESCE(?, TrangThai)
@@ -409,9 +521,11 @@ exports.updateEmployee = async (req, res) => {
         gioiTinh || null,
         diaChi || null,
         chucVu || null,
-        loaiNhanVien || null,
+        finalLoaiNhanVien || null,
+        finalLoaiLuong || null,
+        finalGhiChu !== undefined ? finalGhiChu : null,
         ngayVaoLam ? new Date(ngayVaoLam) : null,
-        luong !== undefined ? Number(luong) : null,
+        parsedSalary,
         trangThai || null,
         id,
       ]
@@ -440,10 +554,102 @@ exports.updateEmployee = async (req, res) => {
     res.json({
       success: true,
       message: "Cập nhật thông tin nhân viên thành công!",
+      data: {
+        maNhanVien: Number(id),
+        loaiNhanVien: finalLoaiNhanVien,
+        loaiLuong: finalLoaiLuong,
+        ghiChu: finalGhiChu,
+        luong: parsedSalary,
+        donVi: isPartTime ? "VNĐ/giờ" : "VNĐ/tháng",
+      },
     });
   } catch (error) {
     await connection.rollback();
     res.status(500).json({ success: false, message: error.message });
+  } finally {
+    connection.release();
+  }
+};
+
+/**
+ * [PUT / PATCH] /api/employees/:id/salary
+ * API nhận số tiền lương và cập nhật vào CSDL, ghi chú loại lương là HOURLY (hoặc MONTHLY)
+ */
+exports.updateEmployeeSalary = async (req, res) => {
+  const connection = await db.getConnection();
+  try {
+    await ensureEmployeeSchema(connection);
+    const { id } = req.params;
+    const { luong, salary, amount, loaiNhanVien, loaiLuong, ghiChu } = req.body;
+
+    const rawSalary = luong !== undefined ? luong : (salary !== undefined ? salary : amount);
+    if (rawSalary === undefined || rawSalary === null || rawSalary === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập số tiền lương!",
+      });
+    }
+
+    const finalSalary = Number(String(rawSalary).replace(/[^\d.]/g, ""));
+    if (isNaN(finalSalary) || finalSalary < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Số tiền lương không hợp lệ!",
+      });
+    }
+
+    const [empRows] = await connection.query(
+      "SELECT MaNhanVien, HoTen, LoaiNhanVien FROM nhanvien WHERE MaNhanVien = ?",
+      [id]
+    );
+
+    if (empRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy nhân viên!",
+      });
+    }
+
+    const currentEmp = empRows[0];
+    const targetType = loaiNhanVien || currentEmp.LoaiNhanVien || "Full-time";
+    const isPartTime =
+      targetType.toLowerCase().includes("part") ||
+      (loaiLuong && String(loaiLuong).toUpperCase() === "HOURLY");
+
+    const finalLoaiNhanVien = isPartTime ? "Part-time" : "Full-time";
+    const finalLoaiLuong = isPartTime ? "HOURLY" : "MONTHLY";
+    // Yêu cầu: Ghi chú loại lương là HOURLY khi là Part-time
+    const finalGhiChu = ghiChu ? String(ghiChu).trim() : (isPartTime ? "HOURLY" : "MONTHLY");
+
+    await connection.query(
+      `UPDATE nhanvien SET 
+        Luong = ?, 
+        LoaiNhanVien = ?, 
+        LoaiLuong = ?, 
+        GhiChu = ? 
+       WHERE MaNhanVien = ?`,
+      [finalSalary, finalLoaiNhanVien, finalLoaiLuong, finalGhiChu, id]
+    );
+
+    return res.json({
+      success: true,
+      message: `Cập nhật mức lương cho ${currentEmp.HoTen} thành công! Loại lương: ${finalLoaiLuong}`,
+      data: {
+        maNhanVien: Number(id),
+        hoTen: currentEmp.HoTen,
+        luong: finalSalary,
+        loaiNhanVien: finalLoaiNhanVien,
+        loaiLuong: finalLoaiLuong,
+        ghiChu: finalGhiChu,
+        donVi: isPartTime ? "VNĐ/giờ" : "VNĐ/tháng",
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi cập nhật lương:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi hệ thống khi cập nhật lương: " + error.message,
+    });
   } finally {
     connection.release();
   }
@@ -506,3 +712,5 @@ exports.getRoles = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.ensureEmployeeSchema = ensureEmployeeSchema;

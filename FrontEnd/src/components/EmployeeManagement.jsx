@@ -204,9 +204,15 @@ export default function EmployeeManagement() {
     setSubmitting(true);
 
     try {
+      const isPart = form.loaiNhanVien === "Part-time";
+      const cleanedSalary = form.luong
+        ? Number(String(form.luong).replace(/\D/g, ""))
+        : 0;
       const payload = {
         ...form,
-        luong: form.luong ? Number(form.luong) : 0,
+        luong: cleanedSalary,
+        loaiLuong: isPart ? "HOURLY" : "MONTHLY",
+        ghiChu: isPart ? "HOURLY" : "MONTHLY",
         maVaiTro: Number(form.maVaiTro),
       };
 
@@ -244,23 +250,30 @@ export default function EmployeeManagement() {
     setSalaryError("");
   };
 
-  // Lưu mức lương mới qua API cập nhật nhân viên
+  // Lưu mức lương mới qua API cập nhật nhân viên (ghi chú loại lương HOURLY cho Part-time)
   const handleSaveSalary = async (e) => {
     e.preventDefault();
-    if (!salaryForm.luong || Number(salaryForm.luong) <= 0) {
+    const cleanedSalary = salaryForm.luong
+      ? Number(String(salaryForm.luong).replace(/\D/g, ""))
+      : 0;
+    if (!cleanedSalary || cleanedSalary <= 0) {
       setSalaryError("Vui lòng nhập mức lương lớn hơn 0.");
       return;
     }
     setSalaryError("");
     setSavingSalary(true);
     try {
-      const res = await axios.put(`${API_BASE}/employees/${salaryEmployee.MaNhanVien}`, {
+      const isPart = salaryForm.loaiNhanVien === "Part-time";
+      const payload = {
         loaiNhanVien: salaryForm.loaiNhanVien,
-        luong: Number(salaryForm.luong),
-      });
+        luong: cleanedSalary,
+        loaiLuong: isPart ? "HOURLY" : "MONTHLY",
+        ghiChu: isPart ? "HOURLY" : "MONTHLY",
+      };
+      const res = await axios.put(`${API_BASE}/employees/${salaryEmployee.MaNhanVien}`, payload);
       if (res.data && res.data.success) {
         setActionNotice(
-          `Đã cập nhật mức lương cho "${salaryEmployee.HoTen}": ${formatMoney(salaryForm.luong)} VNĐ / ${SALARY_RANGE[salaryForm.loaiNhanVien].unit}.`
+          `Đã cập nhật mức lương cho "${salaryEmployee.HoTen}": ${formatMoney(String(cleanedSalary))} VNĐ / ${SALARY_RANGE[salaryForm.loaiNhanVien].unit} (${isPart ? "Loại lương: HOURLY" : "Lương tháng"}).`
         );
         setSalaryEmployee(null);
         fetchEmployees(search);
@@ -580,7 +593,7 @@ export default function EmployeeManagement() {
                             border: "1px solid #fde68a",
                           }}
                         >
-                          Part-time (Lương giờ)
+                          Part-time (HOURLY)
                         </span>
                         <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "3px" }}>
                           {emp.Luong && Number(emp.Luong) > 0
@@ -1053,33 +1066,88 @@ export default function EmployeeManagement() {
                   />
                 </div>
 
-                {/* Mức lương (Tự động thay đổi label & placeholder theo loại hợp đồng) */}
+                {/* Mức lương (Tự động chuyển đổi theo loại nhân viên) */}
                 <div>
-                  <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "#334155", marginBottom: "6px" }}>
+                  <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, color: "#1e293b", marginBottom: "6px" }}>
                     {form.loaiNhanVien === "Part-time"
-                      ? "Mức lương theo giờ (VNĐ / Giờ)"
-                      : "Mức lương cứng / Tháng (VNĐ)"}
+                      ? "Lương cơ bản theo giờ (VNĐ/giờ)"
+                      : "Lương cơ bản (VNĐ/tháng)"}{" "}
+                    <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     placeholder={
                       form.loaiNhanVien === "Part-time"
-                        ? "Ví dụ: 25000 (hoặc 30000)"
-                        : "Ví dụ: 6500000 (Lương tháng)"
+                        ? "Ví dụ: 22,000 VNĐ/giờ"
+                        : "Ví dụ: 6,500,000 VNĐ/tháng"
                     }
-                    value={form.luong}
-                    onChange={(e) => setForm({ ...form, luong: e.target.value })}
+                    value={form.luong ? formatMoney(String(form.luong).replace(/\D/g, "")) : ""}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, "");
+                      setForm({ ...form, luong: digits });
+                    }}
                     style={{
                       width: "100%",
                       padding: "9px 12px",
                       borderRadius: "6px",
                       border: "1px solid #cbd5e1",
-                      fontSize: "0.9rem",
+                      fontSize: "0.95rem",
+                      fontWeight: 600,
+                      color: "#1e293b",
                     }}
                   />
+                  {/* Gợi ý chọn nhanh mức lương */}
+                  {form.loaiNhanVien === "Part-time" ? (
+                    <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                      <span style={{ fontSize: "0.74rem", color: "#64748b" }}>Gợi ý lương giờ:</span>
+                      {["22000", "25000", "30000"].map((rate) => (
+                        <button
+                          key={rate}
+                          type="button"
+                          onClick={() => setForm({ ...form, luong: rate })}
+                          style={{
+                            border: "1px solid #cbd5e1",
+                            background: String(form.luong) === rate ? "#e0e7ff" : "#f8fafc",
+                            color: String(form.luong) === rate ? "#4338ca" : "#475569",
+                            fontSize: "0.75rem",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {Number(rate).toLocaleString("vi-VN")} đ/h
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                      <span style={{ fontSize: "0.74rem", color: "#64748b" }}>Gợi ý:</span>
+                      {["6500000", "8000000", "10000000"].map((sal) => (
+                        <button
+                          key={sal}
+                          type="button"
+                          onClick={() => setForm({ ...form, luong: sal })}
+                          style={{
+                            border: "1px solid #cbd5e1",
+                            background: String(form.luong) === sal ? "#e0e7ff" : "#f8fafc",
+                            color: String(form.luong) === sal ? "#4338ca" : "#475569",
+                            fontSize: "0.75rem",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {formatMoney(sal)} đ
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <span style={{ display: "block", fontSize: "0.76rem", color: "#64748b", marginTop: "4px" }}>
                     {form.loaiNhanVien === "Part-time"
-                      ? "Đơn giá trả cho 1 giờ làm việc"
+                      ? "Đơn giá lương cơ bản trả cho 1 giờ làm việc (Loại lương: HOURLY). Ví dụ: 22,000 VNĐ/giờ"
                       : "Mức lương cơ bản cố định mỗi tháng"}
                   </span>
                 </div>
@@ -1341,16 +1409,41 @@ export default function EmployeeManagement() {
                 {/* Mức lương mới (định dạng hàng nghìn) */}
                 <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "#334155", marginBottom: "6px" }}>
                   {salaryForm.loaiNhanVien === "Part-time"
-                    ? "Mức lương mới theo giờ (VNĐ / Giờ)"
-                    : "Mức lương cứng mới / Tháng (VNĐ)"}{" "}
+                    ? "Lương cơ bản theo giờ (VNĐ/giờ)"
+                    : "Lương cơ bản theo tháng (VNĐ/tháng)"}{" "}
                   <span style={{ color: "#ef4444" }}>*</span>
                 </label>
                 <MoneyInput
                   autoFocus
                   value={salaryForm.luong}
                   onChange={(digits) => setSalaryForm({ ...salaryForm, luong: digits })}
-                  placeholder={salaryForm.loaiNhanVien === "Part-time" ? "Ví dụ: 25,000" : "Ví dụ: 6,500,000"}
+                  placeholder={salaryForm.loaiNhanVien === "Part-time" ? "Ví dụ: 22,000 VNĐ/giờ" : "Ví dụ: 6,500,000"}
                 />
+                {/* Gợi ý chọn nhanh lương giờ Part-time */}
+                {salaryForm.loaiNhanVien === "Part-time" && (
+                  <div style={{ display: "flex", gap: "6px", marginTop: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.75rem", color: "#64748b" }}>Gợi ý lương giờ:</span>
+                    {["22000", "25000", "30000"].map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => setSalaryForm({ ...salaryForm, luong: rate })}
+                        style={{
+                          border: "1px solid #cbd5e1",
+                          background: String(salaryForm.luong) === rate ? "#e0e7ff" : "#f8fafc",
+                          color: String(salaryForm.luong) === rate ? "#4338ca" : "#475569",
+                          fontSize: "0.75rem",
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {Number(rate).toLocaleString("vi-VN")} VNĐ/giờ
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div style={{ display: "flex", justifyContent: "space-between", marginTop: "6px", fontSize: "0.8rem" }}>
                   <span style={{ color: "#4338ca", fontWeight: 600 }}>{describeMoney(amount)}</span>
                   <span style={{ color: "#94a3b8" }}>
@@ -1544,8 +1637,8 @@ export default function EmployeeManagement() {
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
                   <span style={{ color: "#64748b", fontSize: "0.85rem" }}>Cơ chế tính lương:</span>
                   <span style={{ fontWeight: 600, color: "#334155" }}>
-                    {handoverData.hinhThucLuong || (handoverData.loaiNhanVien === "Part-time" ? "Lương theo giờ" : "Lương cứng theo tháng")}
-                    {handoverData.mucLuong ? ` (${Number(handoverData.mucLuong).toLocaleString("vi-VN")} đ)` : ""}
+                    {handoverData.hinhThucLuong || (handoverData.loaiNhanVien === "Part-time" ? "Lương cơ bản theo giờ (HOURLY)" : "Lương cứng theo tháng")}
+                    {handoverData.mucLuong ? ` (${Number(handoverData.mucLuong).toLocaleString("vi-VN")} ${handoverData.loaiNhanVien === "Part-time" ? "VNĐ/giờ" : "đ/tháng"})` : ""}
                   </span>
                 </div>
 
