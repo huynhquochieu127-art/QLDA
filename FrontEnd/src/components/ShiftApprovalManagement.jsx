@@ -26,6 +26,7 @@ import {
   Coffee,
 } from "lucide-react";
 import "../../css/shifts.css";
+import { toDateKey, formatDateVN } from "../utils/staffWork";
 
 // 3 Ca làm việc tiêu chuẩn trong ngày
 const SHIFT_TYPES = [
@@ -123,8 +124,8 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
       day: "2-digit",
       month: "2-digit",
     });
-    const dateKey = d.toISOString().slice(0, 10); // YYYY-MM-DD
-    const isToday = new Date().toISOString().slice(0, 10) === dateKey;
+    const dateKey = toDateKey(d); // YYYY-MM-DD theo giờ địa phương
+    const isToday = toDateKey(new Date()) === dateKey;
 
     return {
       date: d,
@@ -916,7 +917,7 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
                       </td>
                       <td>
                         <strong>{dayObj?.dayLabel}</strong> (
-                        {new Date(item.dateKey).toLocaleDateString("vi-VN")})
+                        {formatDateVN(item.dateKey)})
                       </td>
                       <td>
                         <span
@@ -1038,7 +1039,7 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
                     <strong>
                       {SHIFT_TYPES.find((s) => s.id === reassignModalItem.shiftType)?.name}
                     </strong>{" "}
-                    - Ngày {new Date(reassignModalItem.dateKey).toLocaleDateString("vi-VN")}
+                    - Ngày {formatDateVN(reassignModalItem.dateKey)}
                   </p>
                 </div>
 
