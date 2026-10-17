@@ -45,6 +45,11 @@ const db = mysql.createPool({
   connectionLimit: 10,
 });
 
+const employeeController = require("./controllers/employeeController");
+if (employeeController.ensureEmployeeSchema) {
+  employeeController.ensureEmployeeSchema(db);
+}
+
 // ==========================================
 // 0. API AUTH (ĐĂNG NHẬP / ĐĂNG XUẤT)
 // ==========================================

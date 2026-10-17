@@ -62,11 +62,12 @@ export function EmployeeDetailModal({ employee, onClose, onEdit }) {
           <InfoRow label="Giới tính" value={detail.GioiTinh} />
           <InfoRow label="Địa chỉ" value={detail.DiaChi} />
           <InfoRow label="Vai trò hệ thống" value={detail.TenVaiTro} />
-          <InfoRow label="Loại hợp đồng" value={isPartTime ? "Part-time (Lương giờ)" : "Full-time (Lương cứng)"} />
+          <InfoRow label="Loại hợp đồng" value={isPartTime ? "Part-time (Lương giờ - HOURLY)" : "Full-time (Lương cứng - MONTHLY)"} />
           <InfoRow
-            label="Mức lương"
-            value={Number(detail.Luong) > 0 ? `${formatMoney(detail.Luong)} / ${isPartTime ? "giờ" : "tháng"}` : "Chưa đặt"}
+            label={isPartTime ? "Lương cơ bản theo giờ" : "Lương cơ bản hàng tháng"}
+            value={Number(detail.Luong) > 0 ? `${formatMoney(detail.Luong)} VNĐ / ${isPartTime ? "giờ" : "tháng"}` : "Chưa đặt"}
           />
+          <InfoRow label="Ghi chú loại lương" value={detail.LoaiLuong || (isPartTime ? "HOURLY" : "MONTHLY")} />
           <InfoRow label="Ngày vào làm" value={joinDate ? formatDateVN(String(joinDate).slice(0, 10)) : ""} />
           <InfoRow label="Trạng thái làm việc" value={detail.TrangThai || "Đang làm việc"} />
           <InfoRow label="Tài khoản" value={isLocked ? "🔒 Đã khóa" : "✅ Đang hoạt động"} />
@@ -96,6 +97,8 @@ export function EmployeeEditModal({ employee, onClose, onSaved }) {
     chucVu: employee.ChucVu || "Pha chế",
     maVaiTro: employee.MaVaiTro || 3,
     trangThai: employee.TrangThai || "Đang làm việc",
+    loaiNhanVien: employee.LoaiNhanVien === "Part-time" ? "Part-time" : "Full-time",
+    luong: employee.Luong && Number(employee.Luong) > 0 ? String(Math.round(Number(employee.Luong))) : "",
   });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -117,10 +120,15 @@ export function EmployeeEditModal({ employee, onClose, onSaved }) {
     if (!validate()) return;
     setSaving(true);
     try {
+      const isPart = form.loaiNhanVien === "Part-time";
+      const cleanedSalary = form.luong ? Number(String(form.luong).replace(/\D/g, "")) : 0;
       const res = await axios.put(`${API_BASE}/employees/${employee.MaNhanVien}`, {
         ...form,
         hoTen: form.hoTen.trim(),
         maVaiTro: Number(form.maVaiTro),
+        luong: cleanedSalary,
+        loaiLuong: isPart ? "HOURLY" : "MONTHLY",
+        ghiChu: isPart ? "HOURLY" : "MONTHLY",
       });
       if (res.data?.success) onSaved(`Đã cập nhật thông tin nhân viên "${form.hoTen.trim()}".`);
     } catch (err) {
@@ -210,6 +218,33 @@ export function EmployeeEditModal({ employee, onClose, onSaved }) {
                 <option value="Đang làm việc">Đang làm việc</option>
                 <option value="Đã nghỉ việc">Đã nghỉ việc</option>
               </select>
+            )}
+            {field(
+              "loaiNhanVien",
+              "Loại hợp đồng lao động",
+              <select
+                className="sw-select"
+                value={form.loaiNhanVien}
+                onChange={(e) => setForm({ ...form, loaiNhanVien: e.target.value })}
+                style={{ fontWeight: 600, color: form.loaiNhanVien === "Part-time" ? "#b45309" : "#1d4ed8" }}
+              >
+                <option value="Full-time">Full-time (Toàn thời gian)</option>
+                <option value="Part-time">Part-time (Lương theo giờ)</option>
+              </select>
+            )}
+            {field(
+              "luong",
+              form.loaiNhanVien === "Part-time" ? "Lương cơ bản theo giờ (VNĐ/giờ)" : "Lương cơ bản (VNĐ/tháng)",
+              <input
+                className="sw-input"
+                inputMode="numeric"
+                placeholder={form.loaiNhanVien === "Part-time" ? "Ví dụ: 22,000 VNĐ/giờ" : "Ví dụ: 6,500,000 VNĐ/tháng"}
+                value={form.luong ? formatMoney(String(form.luong).replace(/\D/g, "")) : ""}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, "");
+                  setForm({ ...form, luong: digits });
+                }}
+              />
             )}
           </div>
 

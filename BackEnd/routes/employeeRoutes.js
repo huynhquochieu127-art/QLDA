@@ -16,6 +16,10 @@ router.get("/employees/:id", employeeController.getEmployeeById);
 // [PUT] Cập nhật nhân viên
 router.put("/employees/:id", employeeController.updateEmployee);
 
+// [PUT / PATCH] Cập nhật mức lương và loại lương (HOURLY / MONTHLY)
+router.put("/employees/:id/salary", employeeController.updateEmployeeSalary);
+router.patch("/employees/:id/salary", employeeController.updateEmployeeSalary);
+
 // [DELETE] Xóa nhân viên
 router.delete("/employees/:id", employeeController.deleteEmployee);
 
