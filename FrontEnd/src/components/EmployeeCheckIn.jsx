@@ -99,56 +99,112 @@ export default function EmployeeCheckIn() {
     writeLocal(STORAGE_KEYS.checkins, next);
   };
 
-  const handleCheckIn = () => {
+  const handleCheckIn = async () => {
     setProcessing(true);
-    const lateMinutes = Math.max(0, nowMinutes - timeToMinutes(currentShift.start));
-    const isLate = lateMinutes > 0;
-    const record = {
-      id: `CI-${Date.now()}`,
-      staffId: user.staffId,
-      staffName: user.name,
-      position: user.position,
-      dateKey: todayKey,
-      shiftType: currentShift.id,
-      shiftName: currentShift.name,
-      shiftStart: currentShift.start,
-      shiftEnd: currentShift.end,
-      checkIn: new Date().toISOString(),
-      checkOut: null,
-      isLate,
-      lateMinutes,
-    };
-    saveCheckins([record, ...checkins]);
+    try {
+      // BẮT BUỘC: Gửi request lên Backend để Backend tự động lấy Server Time (chống gian lận đổi giờ thiết bị)
+      const empIdentifier = user.maNhanVien || user.staffId;
+      const res = await axios.post(`${API_BASE}/timekeeping/checkin`, {
+        maNhanVien: empIdentifier,
+        staffId: user.staffId,
+        maCaLam: currentShift?.maCaLam || currentShift?.id,
+        shiftType: currentShift?.id,
+      });
 
-    // Đồng bộ với Backend MySQL nếu có mã nhân viên
-    if (user.maNhanVien) {
-      axios
-        .post(`${API_BASE}/timekeeping/checkin`, {
-          maNhanVien: user.maNhanVien,
-          gioCheckIn: record.checkIn,
-        })
-        .catch(() => {});
+      const serverData = res.data;
+      const serverTimeStr = serverData.serverTimeString || formatTime(serverData.serverTime);
+      const isLate = !!serverData.isLate;
+      const lateMinutes = serverData.lateMinutes || 0;
+
+      const record = {
+        id: `CI-${Date.now()}`,
+        staffId: user.staffId,
+        staffName: user.name,
+        position: user.position,
+        dateKey: serverData.serverDate || todayKey,
+        shiftType: currentShift.id,
+        shiftName: currentShift.name,
+        shiftStart: currentShift.start,
+        shiftEnd: currentShift.end,
+        checkIn: serverData.serverTime || new Date().toISOString(),
+        checkOut: null,
+        isLate,
+        lateMinutes,
+        timeSource: "SERVER_TIME",
+      };
+      saveCheckins([record, ...checkins]);
+
+      setNotice({
+        type: isLate ? "warning" : "success",
+        text:
+          serverData.message ||
+          (isLate
+            ? `CẢNH BÁO: Check-in ${currentShift.name} lúc ${serverTimeStr} bằng giờ máy chủ (trễ ${lateMinutes} phút so với giờ bắt đầu ${currentShift.start}).`
+            : `Check-in ${currentShift.name} thành công đúng giờ lúc ${serverTimeStr} (Ghi nhận bằng giờ máy chủ). Chúc bạn làm việc vui vẻ!`),
+      });
+    } catch (err) {
+      console.error("Lỗi Check-in với máy chủ:", err);
+      const lateMinutes = Math.max(0, nowMinutes - timeToMinutes(currentShift.start));
+      const isLate = lateMinutes > 0;
+      const record = {
+        id: `CI-${Date.now()}`,
+        staffId: user.staffId,
+        staffName: user.name,
+        position: user.position,
+        dateKey: todayKey,
+        shiftType: currentShift.id,
+        shiftName: currentShift.name,
+        shiftStart: currentShift.start,
+        shiftEnd: currentShift.end,
+        checkIn: new Date().toISOString(),
+        checkOut: null,
+        isLate,
+        lateMinutes,
+        timeSource: "CLIENT_OFFLINE",
+      };
+      saveCheckins([record, ...checkins]);
+      setNotice({
+        type: "warning",
+        text: `Lưu ý: Không kết nối được giờ máy chủ (${err.response?.data?.message || err.message}). Đã lưu tạm thời trên thiết bị!`,
+      });
+    } finally {
+      setProcessing(false);
     }
-
-    setNotice({
-      type: isLate ? "warning" : "success",
-      text: isLate
-        ? `CẢNH BÁO: Check-in ${currentShift.name} lúc ${formatTime(record.checkIn)} (trễ ${lateMinutes} phút so với giờ bắt đầu ${currentShift.start}).`
-        : `Check-in ${currentShift.name} thành công đúng giờ lúc ${formatTime(record.checkIn)}. Chúc bạn làm việc vui vẻ!`,
-    });
-    setProcessing(false);
   };
 
-  const handleCheckOut = () => {
+  const handleCheckOut = async () => {
     if (!window.confirm(`Xác nhận Check-out ${getShift(openRecord.shiftType)?.name}?`)) return;
     setProcessing(true);
-    const checkOut = new Date().toISOString();
-    saveCheckins(checkins.map((r) => (r.id === openRecord.id ? { ...r, checkOut } : r)));
-    setNotice({
-      type: "success",
-      text: `Check-out thành công lúc ${formatTime(checkOut)}. Cảm ơn bạn đã hoàn thành ca làm!`,
-    });
-    setProcessing(false);
+    try {
+      const empIdentifier = user.maNhanVien || user.staffId;
+      const res = await axios.post(`${API_BASE}/timekeeping/checkout`, {
+        maNhanVien: empIdentifier,
+        staffId: user.staffId,
+        maCaLam: openRecord?.shiftId,
+      });
+
+      const serverData = res.data;
+      const serverTimeStr = serverData.serverTimeString || formatTime(serverData.serverTime);
+      const checkOut = serverData.serverTime || new Date().toISOString();
+
+      saveCheckins(checkins.map((r) => (r.id === openRecord.id ? { ...r, checkOut } : r)));
+      setNotice({
+        type: "success",
+        text:
+          serverData.message ||
+          `Check-out thành công lúc ${serverTimeStr} (Ghi nhận bằng giờ máy chủ)! Cảm ơn bạn đã hoàn thành ca làm!`,
+      });
+    } catch (err) {
+      console.error("Lỗi Check-out với máy chủ:", err);
+      const checkOut = new Date().toISOString();
+      saveCheckins(checkins.map((r) => (r.id === openRecord.id ? { ...r, checkOut } : r)));
+      setNotice({
+        type: "info",
+        text: `Check-out đã ghi nhận (Máy chủ: ${err.response?.data?.message || err.message}).`,
+      });
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleSupplementSubmitted = (record) => {
@@ -216,6 +272,23 @@ export default function EmployeeCheckIn() {
               month: "2-digit",
               year: "numeric",
             })}
+          </div>
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: "0.78rem",
+              color: "#166534",
+              background: "#f0fdf4",
+              border: "1px solid #bbf7d0",
+              padding: "3px 10px",
+              borderRadius: 20,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontWeight: 600,
+            }}
+          >
+            🔒 Giờ máy chủ tự động (Chống đổi giờ thiết bị)
           </div>
 
           {mode === "in" && (

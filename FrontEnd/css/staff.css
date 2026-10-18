@@ -488,6 +488,8 @@
 .reg-shift-block .time { font-size: 0.75rem; color: #64748b; }
 .reg-shift-block .slots { font-size: 0.72rem; color: #64748b; margin-top: 4px; }
 
+.reg-shift-block.ca_a .title { color: #15803d; }
+.reg-shift-block.ca_b .title { color: #0369a1; }
 .reg-shift-block.morning .title { color: #b45309; }
 .reg-shift-block.afternoon .title { color: #c2410c; }
 .reg-shift-block.evening .title { color: #4338ca; }
@@ -500,6 +502,43 @@
 .reg-shift-block.status-pending { border-color: #f59e0b; background: #fffbeb; }
 .reg-shift-block.status-approved { border-color: #16a34a; background: #f0fdf4; }
 .reg-shift-block.status-rejected { border-color: #dc2626; background: #fef2f2; }
+
+/* Trạng thái ca làm đã đủ người / hết chỗ */
+.reg-shift-block.is-full {
+  background-color: #f1f5f9 !important;
+  border: 1.5px dashed #cbd5e1 !important;
+  cursor: not-allowed !important;
+  opacity: 0.82;
+  box-shadow: none !important;
+  position: relative;
+}
+
+.reg-shift-block.is-full:hover {
+  background-color: #fef2f2 !important;
+  border-color: #fca5a5 !important;
+}
+
+.reg-shift-block.is-full .title {
+  color: #64748b !important;
+}
+
+.reg-shift-block.is-full .time {
+  color: #94a3b8 !important;
+}
+
+.reg-shift-block.is-full .badge-full {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #fee2e2;
+  color: #b91c1c;
+  font-weight: 700;
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #fca5a5;
+  margin-top: 2px;
+}
 
 /* ==========================================================================
    QH-59: PHIẾU LƯƠNG

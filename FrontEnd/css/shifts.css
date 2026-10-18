@@ -322,6 +322,14 @@
   font-size: 14px;
 }
 
+.shift-title-wrapper.ca_a {
+  color: #16a34a;
+}
+
+.shift-title-wrapper.ca_b {
+  color: #2563eb;
+}
+
 .shift-title-wrapper.morning {
   color: #d97706;
 }

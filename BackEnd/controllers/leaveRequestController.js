@@ -57,7 +57,7 @@ exports.getAllLeaveRequests = async (req, res) => {
     `;
 
     const [requests] = await db.query(query, params);
-
+///a
     // Tính năng nâng cao: Kiểm tra từng đơn xem có trùng với ca đã xếp trước đó (QH-40) hay không
     // Tra cứu trong bảng dangky_ca nơi TrangThai IN ('admin_approved', 'approved')
     const enrichedRequests = await Promise.all(

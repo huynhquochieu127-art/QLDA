@@ -16,7 +16,8 @@ import {
   Edit3,
   X,
   ShieldCheck,
-  Info
+  Info,
+  FileText
 } from "lucide-react";
 import { API_BASE, formatMoney } from "../utils/staffWork";
 
@@ -82,6 +83,52 @@ export default function MonthlyTimesheetManager() {
       setActionLoading(false);
     }
   };
+
+  // Tạo Bảng công nháp (Draft) từ dữ liệu Check-in/out hợp lệ của máy chủ
+  const handleGenerateDraft = async () => {
+    setActionLoading(true);
+    try {
+      const res = await axios.post(`${API_BASE}/bangcong-thang/generate-draft`, {
+        thang: selectedMonth,
+        nam: selectedYear,
+        force: true, // Quản lý kích hoạt tạo nháp tức thì
+      });
+      setMessage({
+        type: "success",
+        text: `✅ ${res.data.message} (Full-time: ${res.data.summary.nhanVienFullTime} NV tính ngày công, Part-time: ${res.data.summary.nhanVienPartTime} NV tính tổng giờ làm)`,
+      });
+      await fetchMonthlyTimesheet();
+    } catch (err) {
+      setMessage({ type: "error", text: err.response?.data?.message || err.message });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Quản lý bấm "Gửi đối soát": đẩy thông báo kèm link xem chi tiết Bảng công nháp đến từng nhân viên tương ứng
+  const handleSendForReview = async () => {
+    if (isLocked) {
+      alert("Bảng công tháng này đã chốt sổ và bị khóa!");
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await axios.post(`${API_BASE}/bangcong-thang/send-for-review`, {
+        thang: selectedMonth,
+        nam: selectedYear,
+      });
+      setMessage({
+        type: "success",
+        text: `✅ ${res.data.message}`,
+      });
+      await fetchMonthlyTimesheet();
+    } catch (err) {
+      setMessage({ type: "error", text: err.response?.data?.message || err.message });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
 
   // Quản lý mở modal chỉnh sửa / xử lý khiếu nại
   const openEditModal = (item) => {
@@ -262,6 +309,31 @@ export default function MonthlyTimesheetManager() {
             title="Tải lại bảng công"
           >
             <RotateCcw size={15} /> Làm mới
+          </button>
+
+          <button
+            onClick={handleGenerateDraft}
+            disabled={actionLoading || isLocked}
+            style={{ ...btnSecondaryStyle, color: "#4f46e5", borderColor: "#c7d2fe", backgroundColor: "#eef2ff", fontWeight: "600" }}
+            title="Lấy dữ liệu Check-in/out hợp lệ của máy chủ để tổng hợp Bảng công nháp (Part-time: giờ làm, Full-time: ngày công)"
+          >
+            <FileText size={15} /> Xuất Bảng công nháp (Draft)
+          </button>
+
+          <button
+            onClick={handleSendForReview}
+            disabled={actionLoading || isLocked}
+            style={{
+              ...btnSecondaryStyle,
+              color: "#0369a1",
+              borderColor: "#7dd3fc",
+              backgroundColor: "#f0f9ff",
+              fontWeight: "700",
+              boxShadow: "0 1px 2px rgba(2, 132, 199, 0.15)",
+            }}
+            title="Gửi đối soát: Đẩy thông báo kèm link xem chi tiết Bảng công nháp đến từng nhân viên tương ứng"
+          >
+            <Send size={15} /> Gửi đối soát
           </button>
 
           <button

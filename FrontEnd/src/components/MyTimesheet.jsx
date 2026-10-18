@@ -271,6 +271,16 @@ export default function MyTimesheet() {
         </div>
       )}
 
+      {dbRecord?.TrangThai === "sent_to_emp" && !isConfirmed && !isDisputed && !isSubmittedToAdmin && (
+        <div className="sw-alert" style={{ backgroundColor: "#f0f9ff", border: "1.5px solid #7dd3fc", color: "#0369a1", display: "flex", gap: "10px", alignItems: "flex-start", padding: "12px 16px", borderRadius: "8px", marginBottom: "16px" }}>
+          <ClipboardCheck size={18} style={{ flexShrink: 0, marginTop: 2, color: "#0284c7" }} />
+          <span style={{ fontSize: "14px" }}>
+            <strong>📋 BẢNG CÔNG NHÁP ĐÃ ĐƯỢC QUẢN LÝ GỬI ĐỐI SOÁT:</strong> Vui lòng rà soát kỹ tổng số ngày công / số giờ làm bên dưới. Nếu thông tin hoàn toàn chính xác, vui lòng bấm nút <strong>[Xác nhận đúng]</strong> bên dưới. Nếu có sai sót công làm, hãy bấm <strong>[Báo cáo sai sót]</strong> để Quản lý kiểm tra camera & sổ sách điều chỉnh lại.
+          </span>
+        </div>
+      )}
+
+
       <div className="sw-stats">
         <div className="sw-stat">
           <div className="sw-stat-label">Ngày công</div>

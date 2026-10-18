@@ -174,6 +174,37 @@ export default function PayrollManagement() {
         </div>
       )}
 
+      {/* QUY TẮC TÍNH LƯƠNG CHUẨN (QH-28 & QH-29) */}
+      <div
+        style={{
+          backgroundColor: "#f8fafc",
+          border: "1.5px solid #cbd5e1",
+          borderRadius: "10px",
+          padding: "14px 18px",
+          marginBottom: "16px",
+          display: "flex",
+          gap: "16px",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ flex: 1, minWidth: "280px" }}>
+          <div style={{ fontWeight: 700, color: "#0284c7", fontSize: "14px", marginBottom: "4px" }}>
+            ⏱️ Part-time (QH-29):
+          </div>
+          <div style={{ fontSize: "13px", color: "#334155" }}>
+            <strong>Tổng lương</strong> = Số giờ làm thực tế × Mức lương theo giờ
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: "280px" }}>
+          <div style={{ fontWeight: 700, color: "#16a34a", fontSize: "14px", marginBottom: "4px" }}>
+            👔 Full-time (QH-28):
+          </div>
+          <div style={{ fontSize: "13px", color: "#334155" }}>
+            <strong>Tổng lương</strong> = Lương cứng (QH-28) − (Số ngày nghỉ không phép × Phạt) + Thưởng (nếu có)
+          </div>
+        </div>
+      </div>
+
       {/* 2. BANNER LIÊN KẾT TÍN HIỆU TỪ BẢNG CÔNG (TASK QH-55) */}
       <div
         style={{
@@ -321,11 +352,12 @@ export default function PayrollManagement() {
                 <th style={thStyle}>Mã NV</th>
                 <th style={thStyle}>Họ và tên</th>
                 <th style={thStyle}>Chức vụ / Loại HĐ</th>
-                <th style={thStyle}>Lương cơ bản</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Công / Giờ</th>
+                <th style={thStyle}>Lương cơ sở</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Công / Giờ TT</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>Thưởng</th>
-                <th style={{ ...thStyle, textAlign: "right" }}>Khấu trừ</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Khấu trừ (Phạt)</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>THỰC LĨNH</th>
+                <th style={thStyle}>Chi tiết công thức</th>
                 <th style={thStyle}>Trạng thái</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Thao tác Admin</th>
               </tr>
@@ -346,19 +378,36 @@ export default function PayrollManagement() {
                     </span>
                   </td>
                   <td style={tdStyle}>
-                    {formatMoney(row.LuongCoBan)} / {row.LoaiNhanVien === "Part-time" ? "giờ" : "tháng"}
+                    <div style={{ fontWeight: "600" }}>{formatMoney(row.LuongCoBan)}</div>
+                    <div style={{ fontSize: "11px", color: "#64748b" }}>
+                      {row.LoaiNhanVien === "Part-time" ? "theo giờ" : "lương cứng"}
+                    </div>
                   </td>
                   <td style={{ ...tdStyle, textAlign: "center", fontWeight: "600" }}>
-                    {row.LoaiNhanVien === "Part-time" ? `${row.SoGioLam} giờ` : `${row.SoCong} công`}
+                    {row.LoaiNhanVien === "Part-time" ? (
+                      <span style={{ color: "#0284c7" }}>{row.SoGioLam} giờ</span>
+                    ) : (
+                      <div>
+                        <span>{row.SoCong} công</span>
+                        {Number(row.SoNgayNghiKhongPhep) > 0 && (
+                          <div style={{ color: "#dc2626", fontSize: "11px", fontWeight: "500" }}>
+                            Nghỉ KP: {row.SoNgayNghiKhongPhep} ngày
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </td>
-                  <td style={{ ...tdStyle, textAlign: "right", color: "#16a34a", fontWeight: "600" }}>
-                    + {formatMoney(row.Thuong)}
+                  <td style={{ ...tdStyle, textAlign: "right", color: Number(row.Thuong) > 0 ? "#16a34a" : "#64748b", fontWeight: "600" }}>
+                    {Number(row.Thuong) > 0 ? `+ ${formatMoney(row.Thuong)}` : "0đ"}
                   </td>
-                  <td style={{ ...tdStyle, textAlign: "right", color: "#dc2626", fontWeight: "600" }}>
-                    - {formatMoney(row.KhauTru)}
+                  <td style={{ ...tdStyle, textAlign: "right", color: Number(row.KhauTru) > 0 ? "#dc2626" : "#64748b", fontWeight: "600" }}>
+                    {Number(row.KhauTru) > 0 ? `- ${formatMoney(row.KhauTru)}` : "0đ"}
                   </td>
                   <td style={{ ...tdStyle, textAlign: "right", fontWeight: "800", fontSize: "15px", color: "#059669" }}>
                     {formatMoney(row.TongLuong)}
+                  </td>
+                  <td style={{ ...tdStyle, fontSize: "12px", color: "#475569", maxWidth: "240px", lineHeight: "1.3" }}>
+                    {row.GhiChu || (row.LoaiNhanVien === "Part-time" ? `${row.SoGioLam}h × ${formatMoney(row.LuongCoBan)}` : `Lương cứng - Phạt + Thưởng`)}
                   </td>
                   <td style={tdStyle}>
                     <span

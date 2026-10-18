@@ -54,14 +54,17 @@ export default function LeaveRequestManagement({
   const [submittingCreate, setSubmittingCreate] = useState(false);
   const [previewShiftOverlap, setPreviewShiftOverlap] = useState(null);
 
-  // Lấy dữ liệu ca làm đã xếp từ localStorage (được tạo bởi module Xếp ca QH-40)
-  const localShifts = useMemo(() => {
-    try {
-      const raw = localStorage.getItem("app_mock_shift_registrations");
-      return raw ? JSON.parse(raw) : [];
-    } catch (_) {
-      return [];
-    }
+  // Lấy dữ liệu ca làm đã xếp từ Database CSDL (bảng dangky_ca)
+  const [dbShifts, setDbShifts] = useState([]);
+  useEffect(() => {
+    axios
+      .get(`${API_BASE}/shifts/registrations`)
+      .then((res) => {
+        if (res.data?.success && Array.isArray(res.data.data)) {
+          setDbShifts(res.data.data);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Show Toast helper
@@ -86,9 +89,9 @@ export default function LeaveRequestManagement({
           let shiftText = item.assignedShiftText || "";
           let shiftWarning = item.shiftWarning || "";
 
-          // Kiểm tra thêm trong localShifts nếu backend chưa nhận diện ca local
-          if (!hasOverlap && localShifts.length > 0) {
-            const matchedLocal = localShifts.find((s) => {
+          // Kiểm tra thêm trong dbShifts nếu cần
+          if (!hasOverlap && dbShifts.length > 0) {
+            const matchedLocal = dbShifts.find((s) => {
               const matchDate = s.dateKey === item.NgayNghi;
               const matchStaff =
                 s.staffId === item.MaNhanVienCode ||

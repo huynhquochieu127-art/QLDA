@@ -6,10 +6,16 @@ const INSURANCE_RATE = 0.105; // 10.5% BHXH, BHYT, BHTN
 
 /**
  * Hàm lõi tính lương nội bộ
+ * Quy tắc tính lương:
+ * - Part-time: Tổng lương = Số giờ làm thực tế x Mức lương theo giờ (QH-29).
+ * - Full-time: Tổng lương = Lương cứng (QH-28) - (Số ngày nghỉ không phép x Phạt) + Thưởng (nếu có).
  * @param {number} thang
  * @param {number} nam
+ * @param {object} options
  */
-async function runPayrollCalculationInternal(thang, nam) {
+async function runPayrollCalculationInternal(thang, nam, options = {}) {
+  const force = options.force === true;
+
   // 1. KIỂM TRA TÍN HIỆU "ĐÃ CHỐT SỔ" TỪ PHÂN HỆ BẢNG CÔNG (TASK QH-55)
   const [timesheetStats] = await db.query(
     `SELECT 
@@ -23,13 +29,19 @@ async function runPayrollCalculationInternal(thang, nam) {
   const total = timesheetStats[0]?.total || 0;
   const lockedCount = timesheetStats[0]?.lockedCount || 0;
 
-  if (total === 0 || lockedCount < total) {
+  if (total === 0) {
+    throw new Error(
+      `Chưa có dữ liệu bảng công tháng ${thang}/${nam}! Vui lòng yêu cầu Quản lý xuất bảng công nháp và chốt sổ trước khi tính lương.`
+    );
+  }
+
+  if (!force && lockedCount < total) {
     throw new Error(
       `Không thể tính lương! Bảng công tháng ${thang}/${nam} chưa được Quản lý chốt sổ (Task QH-55). API chỉ bắt đầu chạy tính lương khi nhận được tín hiệu "Đã chốt sổ" từ phân hệ Bảng công đẩy sang.`
     );
   }
 
-  // 2. Lấy dữ liệu bảng công đã chốt kèm thông tin lương nhân viên
+  // 2. Lấy dữ liệu bảng công kèm thông tin lương nhân viên
   const [timesheets] = await db.query(
     `SELECT 
       bc.MaBangCong,
@@ -45,10 +57,9 @@ async function runPayrollCalculationInternal(thang, nam) {
       nv.HoTen,
       nv.LoaiNhanVien,
       nv.Luong,
-      COALESCE(cv.TenChucVu, nv.ChucVu, 'Nhân viên') AS ChucVu
+      COALESCE(nv.ChucVu, 'Nhân viên') AS ChucVu
      FROM bangcong_thang bc
      JOIN nhanvien nv ON bc.MaNhanVien = nv.MaNhanVien
-     LEFT JOIN chucvu cv ON nv.MaChucVu = cv.MaChucVu
      WHERE bc.Thang = ? AND bc.Nam = ?`,
     [thang, nam]
   );
@@ -56,39 +67,90 @@ async function runPayrollCalculationInternal(thang, nam) {
   const results = [];
 
   for (const row of timesheets) {
-    const isPartTime = row.LoaiNhanVien === "Part-time";
-    const baseSalary = Number(row.Luong) > 0 ? Number(row.Luong) : isPartTime ? 25000 : 6500000;
+    const isPartTime = (row.LoaiNhanVien || "").toLowerCase().includes("part");
+    const rawLuong = Number(row.Luong) || 0;
     const soCong = Number(row.SoCong) || 0;
     const soGioLam = Number(row.SoGioLam) || 0;
     const soNgayTre = Number(row.SoNgayTre) || 0;
-    const soNgayNghi = Number(row.SoNgayNghi) || 0;
+    const soNgayNghi = Number(row.SoNgayNghi) || Math.max(0, STANDARD_WORK_DAYS - Math.round(soCong));
 
-    let luongChinh = 0;
-    let baoHiem = 0;
-    let phatTre = soNgayTre * LATE_PENALTY;
-    let thuong = 300000; // Thưởng chuyên cần/doanh thu chuẩn
+    let luongCoBan = 0;
+    let soNgayNghiKhongPhep = 0;
+    let mucPhatMoiNgay = 0;
+    let tienPhat = 0;
+    let thuong = 0;
+    let khauTru = 0;
+    let tongLuong = 0;
+    let ghiChu = "";
 
     if (isPartTime) {
-      luongChinh = Math.round(soGioLam * baseSalary);
-      baoHiem = 0;
-      if (soNgayTre === 0 && soGioLam >= 80) thuong = 400000;
+      // =========================================================================
+      // 1. PART-TIME: Tổng lương = Số giờ làm thực tế x Mức lương theo giờ (QH-29)
+      // =========================================================================
+      const mucLuongGio = rawLuong > 0 ? rawLuong : 30000; // Mức lương theo giờ (VNĐ/h)
+      luongCoBan = mucLuongGio;
+      tongLuong = Math.round(soGioLam * mucLuongGio);
+      thuong = soGioLam >= 120 ? 300000 : 0; // Thưởng chuyên cần vượt giờ nếu có
+      khauTru = 0;
+      soNgayNghiKhongPhep = 0;
+      tienPhat = 0;
+
+      ghiChu = `Part-time (QH-29): ${soGioLam} giờ làm thực tế x ${mucLuongGio.toLocaleString('vi-VN')}đ/giờ` +
+        (thuong > 0 ? ` + Thưởng vượt giờ ${thuong.toLocaleString('vi-VN')}đ` : "") +
+        ` = ${tongLuong.toLocaleString('vi-VN')}đ`;
+
+      if (thuong > 0) {
+        tongLuong += thuong;
+      }
     } else {
-      const dailyRate = baseSalary / STANDARD_WORK_DAYS;
-      luongChinh = Math.round(soCong * dailyRate);
-      baoHiem = Math.round(baseSalary * INSURANCE_RATE);
-      if (soNgayTre === 0 && soNgayNghi === 0) thuong = 500000;
+      // =========================================================================
+      // 2. FULL-TIME: Tổng lương = Lương cứng (QH-28) - (Số ngày nghỉ không phép x Phạt) + Thưởng (nếu có)
+      // =========================================================================
+      const luongCung = rawLuong >= 1000000 ? rawLuong : 8000000; // Lương cứng Full-time
+      luongCoBan = luongCung;
+
+      // Tra cứu số ngày nghỉ có phép từ bảng đơn xin nghỉ phép đã được duyệt
+      const [leaveRows] = await db.query(
+        `SELECT COUNT(*) AS soNgayCoPhep 
+         FROM don_xin_nghi 
+         WHERE MaNhanVien = ? 
+           AND MONTH(NgayNghi) = ? 
+           AND YEAR(NgayNghi) = ? 
+           AND (TrangThai = 'approved' OR TrangThai = 'Đã duyệt')`,
+        [row.MaNhanVien, thang, nam]
+      );
+
+      const soNgayCoPhep = Number(leaveRows[0]?.soNgayCoPhep || 0);
+      soNgayNghiKhongPhep = Math.max(0, soNgayNghi - soNgayCoPhep);
+
+      // Mức phạt cho 1 ngày nghỉ không phép: Lương 1 ngày công (Lương cứng / 26)
+      mucPhatMoiNgay = Math.round(luongCung / STANDARD_WORK_DAYS);
+      tienPhat = soNgayNghiKhongPhep * mucPhatMoiNgay;
+
+      // Thưởng chuyên cần & hiệu suất (nếu có)
+      if (soNgayNghiKhongPhep === 0 && soNgayTre === 0) {
+        thuong = 500000; // Thưởng tối đa nếu đi làm đủ, không trễ, không nghỉ không phép
+      } else if (soNgayNghiKhongPhep === 0) {
+        thuong = 300000;
+      } else if (soNgayNghiKhongPhep === 1) {
+        thuong = 150000;
+      } else {
+        thuong = 0; // Nghỉ từ 2 ngày không phép trở lên: không có thưởng
+      }
+
+      khauTru = tienPhat;
+      tongLuong = Math.max(0, Math.round(luongCung - tienPhat + thuong));
+
+      ghiChu = `Full-time (QH-28): Lương cứng ${luongCung.toLocaleString('vi-VN')}đ - (Nghỉ không phép: ${soNgayNghiKhongPhep} ngày x ${mucPhatMoiNgay.toLocaleString('vi-VN')}đ) + Thưởng: ${thuong.toLocaleString('vi-VN')}đ = ${tongLuong.toLocaleString('vi-VN')}đ`;
     }
 
-    const khauTru = phatTre + baoHiem;
-    const tongLuong = Math.max(0, Math.round(luongChinh + thuong - khauTru));
     const tongCaLam = Math.round(soCong) || Math.round(soGioLam / 5) || 0;
-    const ghiChu = `Tính tự động từ bảng công đã chốt: Lương chính ${luongChinh.toLocaleString('vi-VN')}đ, Thưởng ${thuong.toLocaleString('vi-VN')}đ, Khấu trừ ${khauTru.toLocaleString('vi-VN')}đ (Trễ: ${phatTre.toLocaleString('vi-VN')}đ, BH: ${baoHiem.toLocaleString('vi-VN')}đ)`;
 
     // Lưu vào bảng bangluong (có UNIQUE KEY trên MaNhanVien, Thang, Nam)
     await db.query(
       `INSERT INTO bangluong 
-       (MaNhanVien, Thang, Nam, TongCaLam, Thuong, KhauTru, TongLuong, TrangThai, LuongCoBan, SoCong, SoGioLam, GhiChu)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'Chờ duyệt', ?, ?, ?, ?)
+       (MaNhanVien, Thang, Nam, TongCaLam, Thuong, KhauTru, TongLuong, TrangThai, LuongCoBan, SoCong, SoGioLam, SoNgayNghiKhongPhep, TienPhat, GhiChu)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'Chờ duyệt', ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE 
        TongCaLam = VALUES(TongCaLam),
        Thuong = VALUES(Thuong),
@@ -97,6 +159,8 @@ async function runPayrollCalculationInternal(thang, nam) {
        LuongCoBan = VALUES(LuongCoBan),
        SoCong = VALUES(SoCong),
        SoGioLam = VALUES(SoGioLam),
+       SoNgayNghiKhongPhep = VALUES(SoNgayNghiKhongPhep),
+       TienPhat = VALUES(TienPhat),
        GhiChu = VALUES(GhiChu)`,
       [
         row.MaNhanVien,
@@ -106,9 +170,11 @@ async function runPayrollCalculationInternal(thang, nam) {
         thuong,
         khauTru,
         tongLuong,
-        baseSalary,
+        luongCoBan,
         soCong,
         soGioLam,
+        soNgayNghiKhongPhep,
+        tienPhat,
         ghiChu,
       ]
     );
@@ -119,16 +185,17 @@ async function runPayrollCalculationInternal(thang, nam) {
       hoTen: row.HoTen,
       chucVu: row.ChucVu,
       loaiNhanVien: row.LoaiNhanVien,
-      luongCoBan: baseSalary,
+      luongCoBan,
       soCong,
       soGioLam,
       soNgayTre,
-      luongChinh,
+      soNgayNghiKhongPhep,
+      tienPhat,
+      mucPhatMoiNgay,
       thuong,
       khauTru,
-      phatTre,
-      baoHiem,
       tongLuong,
+      ghiChu,
       trangThai: "Chờ duyệt",
     });
   }
@@ -143,6 +210,7 @@ exports.runPayrollCalculationInternal = runPayrollCalculationInternal;
 exports.calculatePayroll = async (req, res) => {
   try {
     const { thang, nam } = req.body;
+    const force = req.body.force === true || req.query.force === "true";
     if (!thang || !nam) {
       return res.status(400).json({ success: false, message: "Vui lòng truyền tháng và năm cần tính lương!" });
     }
@@ -162,8 +230,8 @@ exports.calculatePayroll = async (req, res) => {
     const lockedCount = timesheetStats[0]?.lockedCount || 0;
     const complaintCount = timesheetStats[0]?.complaintCount || 0;
 
-    // NẾU CHƯA NHẬN ĐƯỢC TÍN HIỆU "ĐÃ CHỐT SỔ":
-    if (total === 0 || lockedCount < total) {
+    // NẾU CHƯA NHẬN ĐƯỢC TÍN HIỆU "ĐÃ CHỐT SỔ" VÀ KHÔNG BẬT FORCE:
+    if (!force && (total === 0 || lockedCount < total)) {
       let detailMsg = `Bảng công tháng ${thang}/${nam} chưa được Quản lý chốt sổ (Task QH-55).`;
       if (total === 0) {
         detailMsg = `Chưa có bảng công tháng ${thang}/${nam}. Quản lý cần khởi tạo và chốt bảng công trước.`;
@@ -187,12 +255,12 @@ exports.calculatePayroll = async (req, res) => {
       });
     }
 
-    // 2. KHI ĐÃ CÓ TÍN HIỆU "ĐÃ CHỐT SỔ": TIẾN HÀNH TÍNH TOÁN LƯƠNG
-    const calculatedRows = await runPayrollCalculationInternal(thang, nam);
+    // 2. KHI ĐÃ CÓ TÍN HIỆU "ĐÃ CHỐT SỔ" HOẶC CHẠY CHẾ ĐỘ FORCE: TIẾN HÀNH TÍNH TOÁN LƯƠNG
+    const calculatedRows = await runPayrollCalculationInternal(thang, nam, { force });
 
     return res.json({
       success: true,
-      message: `✅ TÍNH LƯƠNG THÀNH CÔNG! Đã nhận được tín hiệu "Đã chốt sổ" từ Quản lý (QH-55) và tính toán hoàn tất bảng lương tháng ${thang}/${nam} cho ${calculatedRows.length} nhân viên.`,
+      message: `✅ TÍNH LƯƠNG THÀNH CÔNG! Đã tính toán hoàn tất bảng lương tháng ${thang}/${nam} cho ${calculatedRows.length} nhân viên (Part-time: Giờ làm x Mức lương; Full-time: Lương cứng - Phạt nghỉ không phép + Thưởng).`,
       canCalculate: true,
       data: calculatedRows,
     });
@@ -232,7 +300,7 @@ exports.getPayrollList = async (req, res) => {
         bl.MaNhanVien,
         nv.MaNhanVienCode,
         nv.HoTen,
-        COALESCE(cv.TenChucVu, nv.ChucVu, 'Nhân viên') AS ChucVu,
+        COALESCE(nv.ChucVu, 'Nhân viên') AS ChucVu,
         nv.LoaiNhanVien,
         bl.Thang,
         bl.Nam,
@@ -240,6 +308,8 @@ exports.getPayrollList = async (req, res) => {
         bl.LuongCoBan,
         bl.SoCong,
         bl.SoGioLam,
+        bl.SoNgayNghiKhongPhep,
+        bl.TienPhat,
         bl.Thuong,
         bl.KhauTru,
         bl.TongLuong,
@@ -249,7 +319,6 @@ exports.getPayrollList = async (req, res) => {
         DATE_FORMAT(bl.NgayTao, '%d/%m/%Y %H:%i') AS NgayTao
        FROM bangluong bl
        JOIN nhanvien nv ON bl.MaNhanVien = nv.MaNhanVien
-       LEFT JOIN chucvu cv ON nv.MaChucVu = cv.MaChucVu
        WHERE bl.Thang = ? AND bl.Nam = ?
        ORDER BY nv.MaNhanVien ASC`,
       [thang, nam]
@@ -286,6 +355,57 @@ exports.getPayrollList = async (req, res) => {
   }
 };
 
+// Helper: Hook gửi thông báo phiếu lương hàng loạt đến từng nhân viên tương ứng
+async function sendBulkPayrollNotifications(thang, nam, io) {
+  try {
+    const [records] = await db.query(
+      `SELECT bl.MaBangLuong, bl.MaNhanVien, bl.TongLuong, bl.Thang, bl.Nam, nv.HoTen, nv.LoaiNhanVien
+       FROM bangluong bl
+       JOIN nhanvien nv ON bl.MaNhanVien = nv.MaNhanVien
+       WHERE bl.Thang = ? AND bl.Nam = ?`,
+      [thang, nam]
+    );
+
+    let sentCount = 0;
+    for (const item of records) {
+      const tieuDe = `🎉 Ting ting! Phiếu lương tháng này của bạn đã có`;
+      const noiDung = `Chào ${item.HoTen}, Admin đã duyệt bảng lương tháng ${thang}/${nam}. Số tiền thực lĩnh của bạn là ${Number(item.TongLuong).toLocaleString("vi-VN")}đ. Vui lòng bấm vào đây để xem chi tiết Phiếu lương (QH-59).`;
+      const link = `#my_payslip?thang=${thang}&nam=${nam}`;
+
+      // Lưu thông báo vào CSDL
+      const [insertRes] = await db.query(
+        `INSERT INTO thongbao (TieuDe, NoiDung, Loai, MaNhanVien, Link, DaXem, NgayTao)
+         VALUES (?, ?, 'payslip', ?, ?, 0, NOW())`,
+        [tieuDe, noiDung, item.MaNhanVien, link]
+      );
+
+      // Bắn sự kiện realtime qua Socket.IO đến client
+      if (io) {
+        io.emit("new_notification", {
+          maTB: insertRes.insertId,
+          maNhanVien: item.MaNhanVien,
+          hoTen: item.HoTen,
+          tieuDe,
+          noiDung,
+          link,
+          loai: "payslip",
+          thang,
+          nam,
+          tongLuong: item.TongLuong,
+          ngayTao: new Date(),
+        });
+      }
+      sentCount++;
+    }
+    return sentCount;
+  } catch (err) {
+    console.error("Lỗi sendBulkPayrollNotifications hook:", err);
+    return 0;
+  }
+}
+
+exports.sendBulkPayrollNotifications = sendBulkPayrollNotifications;
+
 // 3. [PUT] /api/bangluong/:id/approve - ADMIN PHÊ DUYỆT / XÁC NHẬN CHI TRẢ LƯƠNG
 exports.approvePayrollItem = async (req, res) => {
   try {
@@ -304,16 +424,55 @@ exports.approvePayrollItem = async (req, res) => {
       return res.status(404).json({ success: false, message: "Không tìm thấy bản ghi lương!" });
     }
 
+    // Gửi thông báo cho nhân viên nếu duyệt
+    if (trangThai === "Đã duyệt" || trangThai === "Đã thanh toán") {
+      const [itemRows] = await db.query(
+        `SELECT bl.MaBangLuong, bl.MaNhanVien, bl.TongLuong, bl.Thang, bl.Nam, nv.HoTen 
+         FROM bangluong bl 
+         JOIN nhanvien nv ON bl.MaNhanVien = nv.MaNhanVien 
+         WHERE bl.MaBangLuong = ?`,
+        [id]
+      );
+      if (itemRows.length > 0) {
+        const item = itemRows[0];
+        const io = req.app?.get("io");
+        const tieuDe = `🎉 Ting ting! Phiếu lương tháng này của bạn đã có`;
+        const noiDung = `Chào ${item.HoTen}, Admin đã duyệt phiếu lương tháng ${item.Thang}/${item.Nam}. Số tiền thực lĩnh của bạn là ${Number(item.TongLuong).toLocaleString("vi-VN")}đ. Bấm vào đây để xem chi tiết Phiếu lương!`;
+        const link = `#my_payslip?thang=${item.Thang}&nam=${item.Nam}`;
+
+        const [ins] = await db.query(
+          `INSERT INTO thongbao (TieuDe, NoiDung, Loai, MaNhanVien, Link, DaXem, NgayTao)
+           VALUES (?, ?, 'payslip', ?, ?, 0, NOW())`,
+          [tieuDe, noiDung, item.MaNhanVien, link]
+        );
+
+        if (io) {
+          io.emit("new_notification", {
+            maTB: ins.insertId,
+            maNhanVien: item.MaNhanVien,
+            tieuDe,
+            noiDung,
+            link,
+            loai: "payslip",
+            thang: item.Thang,
+            nam: item.Nam,
+            tongLuong: item.TongLuong,
+            ngayTao: new Date(),
+          });
+        }
+      }
+    }
+
     return res.json({
       success: true,
-      message: `Đã cập nhật trạng thái phiếu lương thành [${trangThai}]!`,
+      message: `Đã cập nhật trạng thái phiếu lương thành [${trangThai}] và gửi thông báo đến nhân viên!`,
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// 4. [POST] /api/bangluong/approve-all - ADMIN DUYỆT TOÀN BỘ BẢNG LƯƠNG THÁNG
+// 4. [POST] /api/bangluong/approve-all - ADMIN DUYỆT TOÀN BỘ BẢNG LƯƠNG THÁNG & KÍCH HOẠT HOOK THÔNG BÁO HÀNG LOẠT
 exports.approveAllPayroll = async (req, res) => {
   try {
     const { thang, nam } = req.body;
@@ -324,15 +483,22 @@ exports.approveAllPayroll = async (req, res) => {
     const [result] = await db.query(
       `UPDATE bangluong 
        SET TrangThai = 'Đã duyệt'
-       WHERE Thang = ? AND Nam = ? AND TrangThai = 'Chờ duyệt'`,
+       WHERE Thang = ? AND Nam = ?`,
       [thang, nam]
     );
 
+    // Kích hoạt luồng (Hook) gửi thông báo hàng loạt đến từng nhân viên
+    const io = req.app?.get("io");
+    const notifCount = await sendBulkPayrollNotifications(thang, nam, io);
+
     return res.json({
       success: true,
-      message: `Đã phê duyệt bảng lương tháng ${thang}/${nam} cho ${result.affectedRows} nhân viên!`,
+      message: `🎉 Đã phê duyệt toàn bộ bảng lương tháng ${thang}/${nam}! Hệ thống đã kích hoạt Hook gửi thông báo hàng loạt ("Ting ting! Phiếu lương tháng này của bạn đã có") đến ${notifCount} nhân viên.`,
+      approvedCount: result.affectedRows,
+      notifCount,
     });
   } catch (error) {
+    console.error("Lỗi approveAllPayroll:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -354,12 +520,11 @@ exports.getMyPayslip = async (req, res) => {
         nv.MaNhanVienCode,
         nv.HoTen,
         nv.LoaiNhanVien,
-        COALESCE(cv.TenChucVu, nv.ChucVu, 'Nhân viên') AS ChucVu,
+        COALESCE(nv.ChucVu, 'Nhân viên') AS ChucVu,
         bc.SoNgayTre,
         bc.SoNgayNghi
        FROM bangluong bl
        JOIN nhanvien nv ON bl.MaNhanVien = nv.MaNhanVien
-       LEFT JOIN chucvu cv ON nv.MaChucVu = cv.MaChucVu
        LEFT JOIN bangcong_thang bc ON (bl.MaNhanVien = bc.MaNhanVien AND bl.Thang = bc.Thang AND bl.Nam = bc.Nam)
        WHERE bl.MaNhanVien = ? AND bl.Thang = ? AND bl.Nam = ?`,
       [maNhanVien, t, n]

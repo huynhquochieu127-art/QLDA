@@ -79,14 +79,24 @@ export default function Payslip() {
   const workHours = realPayroll ? Number(realPayroll.SoGioLam) : sample.workHours;
   const lateCount = realPayroll ? Number(realPayroll.SoNgayTre || 0) : sample.lateCount;
 
-  // Tính toán phiếu lương
-  const dailyRate = isPartTime ? 0 : baseRate / STANDARD_WORK_DAYS;
-  const hourlyRate = isPartTime ? baseRate : baseRate / (STANDARD_WORK_DAYS * 8);
-  const basePay = isPartTime ? workHours * baseRate : dailyRate * workDays;
+  // Tính toán phiếu lương theo chuẩn QH-28 & QH-29
+  const dailyRate = isPartTime ? 0 : Math.round(baseRate / STANDARD_WORK_DAYS);
+  const hourlyRate = isPartTime ? baseRate : Math.round(baseRate / (STANDARD_WORK_DAYS * 8));
+
+  // Lương chính: Part-time tính theo giờ làm thực tế, Full-time là Lương cứng
+  const basePay = isPartTime ? Math.round(workHours * baseRate) : baseRate;
   const overtimePay = sample.overtimeHours * hourlyRate * 1.5;
 
   const earnings = realPayroll
-    ? [{ label: "Thưởng (Chuyên cần & Doanh thu)", note: "Tính theo bảng công đã chốt", value: Number(realPayroll.Thuong || 0) }]
+    ? Number(realPayroll.Thuong || 0) > 0
+      ? [
+          {
+            label: "Thưởng (Chuyên cần & Hiệu suất)",
+            note: "Áp dụng theo quy chế chấm công",
+            value: Number(realPayroll.Thuong),
+          },
+        ]
+      : []
     : [
         { label: "Thưởng doanh thu", note: "Theo doanh số cửa hàng trong tháng", value: sample.revenueBonus },
         { label: "Tăng ca", note: `${sample.overtimeHours} giờ × 150% đơn giá giờ`, value: overtimePay },
@@ -94,18 +104,23 @@ export default function Payslip() {
       ];
 
   const deductions = realPayroll
-    ? [{ label: "Khấu trừ (Bảo hiểm & Phạt trễ)", note: realPayroll.GhiChu || "Khấu trừ theo quy định", value: Number(realPayroll.KhauTru || 0) }]
+    ? isPartTime
+      ? []
+      : Number(realPayroll.TienPhat || realPayroll.KhauTru || 0) > 0
+      ? [
+          {
+            label: "Phạt nghỉ không phép (QH-28)",
+            note: `${realPayroll.SoNgayNghiKhongPhep || 0} ngày nghỉ KP × ${formatMoney(dailyRate)}/ngày`,
+            value: Number(realPayroll.TienPhat || realPayroll.KhauTru),
+          },
+        ]
+      : []
     : [
         { label: "Đi trễ", note: `${lateCount} lần × ${formatMoney(LATE_PENALTY)}`, value: lateCount * LATE_PENALTY },
         {
           label: "Nghỉ không phép",
           note: isPartTime ? "Không áp dụng cho Part-time" : `${sample.unpaidLeaveDays} ngày × lương 1 ngày`,
           value: isPartTime ? 0 : sample.unpaidLeaveDays * dailyRate,
-        },
-        {
-          label: "Bảo hiểm (BHXH, BHYT, BHTN)",
-          note: isPartTime ? "Không áp dụng cho Part-time" : "10.5% lương cơ bản",
-          value: isPartTime ? 0 : baseRate * INSURANCE_RATE,
         },
       ];
 

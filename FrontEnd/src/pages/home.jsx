@@ -22,6 +22,10 @@ import Payslip from "../components/Payslip";
 import RevenueReport from "../components/RevenueReport";
 import WorkingStaffPanel from "../components/WorkingStaffPanel";
 import PayrollManagement from "../components/PayrollManagement";
+import PartTimeShiftConfig from "../components/PartTimeShiftConfig";
+import FullTimeShiftConfig from "../components/FullTimeShiftConfig";
+import FullTimeShiftRegistration from "../components/FullTimeShiftRegistration";
+import NotificationBell from "../components/NotificationBell";
 import {
   Clock,
   User,
@@ -84,6 +88,25 @@ export default function Home() {
     currentRole = "waiter";
   }
 
+  // 2. XÁC ĐỊNH LOẠI HỢP ĐỒNG: FULL-TIME HAY PART-TIME
+  const rawContract = (
+    user.loaiNhanVien ||
+    user.LoaiNhanVien ||
+    user.contractType ||
+    ""
+  ).toString().toLowerCase();
+
+  // Nhân viên Part-time
+  const isPartTimeStaff = rawContract.includes("part");
+  // Nhân viên Full-time / Quản lý
+  const isFullTimeStaff =
+    rawContract.includes("full") ||
+    rawRole.includes("quản lý") ||
+    rawRole.includes("manager") ||
+    rawRole.includes("admin") ||
+    currentRole === "admin" ||
+    currentRole === "manager";
+
   const getDefaultTab = (role) => {
     switch (role) {
       case "barista":
@@ -96,6 +119,7 @@ export default function Home() {
   };
 
   const [activeTab, setActiveTab] = useState(getDefaultTab(currentRole));
+  const [settingsSubTab, setSettingsSubTab] = useState("fulltime");
   const [selectedPosTable, setSelectedPosTable] = useState("Bàn 01");
   const [currentTime, setCurrentTime] = useState(
     new Date().toLocaleTimeString("vi-VN"),
@@ -166,10 +190,18 @@ export default function Home() {
       roles: ["manager", "cashier", "barista", "waiter"],
     },
     {
-      id: "my_shifts",
-      label: "Đăng ký ca làm",
+      id: "my_shifts_fulltime",
+      label: "Đăng ký ca làm (Full-time)",
       icon: <Calendar size={18} />,
-      roles: ["manager", "cashier", "barista", "waiter"],
+      roles: ["admin", "manager", "cashier", "barista", "waiter"],
+      condition: currentRole === "admin" || !isPartTimeStaff,
+    },
+    {
+      id: "my_shifts_parttime",
+      label: "Đăng ký ca làm (Part-time)",
+      icon: <Clock size={18} />,
+      roles: ["admin", "manager", "cashier", "barista", "waiter"],
+      condition: currentRole === "admin" || isPartTimeStaff,
     },
     {
       id: "my_timesheet",
@@ -223,7 +255,7 @@ export default function Home() {
       id: "settings",
       label: "Cấu hình hệ thống",
       icon: <Settings size={18} />,
-      roles: ["admin"],
+      roles: ["admin", "manager"],
     },
     {
       id: "ai",
@@ -233,9 +265,11 @@ export default function Home() {
     },
   ];
 
-  const allowedMenus = menuList.filter((item) =>
-    item.roles.includes(currentRole),
-  );
+  const allowedMenus = menuList.filter((item) => {
+    if (!item.roles.includes(currentRole)) return false;
+    if (typeof item.condition === "boolean" && !item.condition) return false;
+    return true;
+  });
 
   const getRoleDisplayName = (role) => {
     const rolesMap = {
@@ -293,6 +327,12 @@ export default function Home() {
               <Clock size={16} />
               <span>{currentTime}</span>
             </div>
+
+            {/* Chuông thông báo hệ thống (Notification) */}
+            <NotificationBell
+              currentUser={user}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+            />
 
             <div className="user-profile">
               <User size={20} />
@@ -354,7 +394,13 @@ export default function Home() {
 
           {activeTab === "my_checkin" && <EmployeeCheckIn />}
 
-          {activeTab === "my_shifts" && <ShiftRegistration />}
+          {activeTab === "my_shifts_fulltime" && <FullTimeShiftRegistration />}
+
+          {activeTab === "my_shifts_parttime" && <ShiftRegistration />}
+
+          {activeTab === "my_shifts" && (
+            isPartTimeStaff ? <ShiftRegistration /> : <FullTimeShiftRegistration />
+          )}
 
           {activeTab === "my_timesheet" && <MyTimesheet />}
 
@@ -376,14 +422,70 @@ export default function Home() {
             <ShiftApprovalManagement currentRole={currentRole} />
           )}
 
-          {/* PLACEHOLDER DÀNH CHO CÁC TAB CHƯA CÓ TRANG */}
-          {["settings"].includes(activeTab) && (
-            <div className="tab-placeholder">
-              <Coffee size={28} className="placeholder-icon" />
-              <h2>
-                Phân hệ: {menuList.find((m) => m.id === activeTab)?.label}
-              </h2>
-              <p>Sẵn sàng kết nối MySQL cho phân hệ này.</p>
+          {activeTab === "settings" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  gap: "0.5rem",
+                  background: "#f1f5f9",
+                  padding: "6px",
+                  borderRadius: "12px",
+                  border: "1px solid #e2e8f0",
+                  width: "fit-content",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSettingsSubTab("fulltime")}
+                  style={{
+                    padding: "8px 18px",
+                    borderRadius: "8px",
+                    border: "none",
+                    fontWeight: 600,
+                    fontSize: "0.9rem",
+                    cursor: "pointer",
+                    backgroundColor:
+                      settingsSubTab === "fulltime" ? "#2563eb" : "transparent",
+                    color: settingsSubTab === "fulltime" ? "#ffffff" : "#475569",
+                    boxShadow:
+                      settingsSubTab === "fulltime"
+                        ? "0 2px 4px rgba(37, 99, 235, 0.25)"
+                        : "none",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  👔 2 Ca Chính (Full-time & Quản lý: Ca A, Ca B)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingsSubTab("parttime")}
+                  style={{
+                    padding: "8px 18px",
+                    borderRadius: "8px",
+                    border: "none",
+                    fontWeight: 600,
+                    fontSize: "0.9rem",
+                    cursor: "pointer",
+                    backgroundColor:
+                      settingsSubTab === "parttime" ? "#2563eb" : "transparent",
+                    color: settingsSubTab === "parttime" ? "#ffffff" : "#475569",
+                    boxShadow:
+                      settingsSubTab === "parttime"
+                        ? "0 2px 4px rgba(37, 99, 235, 0.25)"
+                        : "none",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  🎓 3 Ca Ngắn (Part-time / Sinh viên: Ca 1, Ca 2, Ca 3)
+                </button>
+              </div>
+
+              {settingsSubTab === "fulltime" ? (
+                <FullTimeShiftConfig />
+              ) : (
+                <PartTimeShiftConfig />
+              )}
             </div>
           )}
         </div>
