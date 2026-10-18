@@ -261,13 +261,19 @@ export default function EmployeeManagement() {
     setSubmitting(true);
 
     try {
-      const isPart = form.loaiNhanVien === "Part-time";
+      const isManager =
+        (form.chucVu && form.chucVu.toLowerCase().includes("quản lý")) ||
+        Number(form.maVaiTro) === 2;
+      const isFullTimeOrMgr = form.loaiNhanVien === "Full-time" || isManager;
+      const isPart = !isFullTimeOrMgr && form.loaiNhanVien === "Part-time";
       const cleanedSalary = form.luong
         ? Number(String(form.luong).replace(/\D/g, ""))
         : 0;
       const payload = {
         ...form,
+        base_salary: cleanedSalary,
         luong: cleanedSalary,
+        salary: cleanedSalary,
         loaiLuong: isPart ? "HOURLY" : "MONTHLY",
         ghiChu: isPart ? "HOURLY" : "MONTHLY",
         maVaiTro: Number(form.maVaiTro),
@@ -301,14 +307,23 @@ export default function EmployeeManagement() {
   // Mở modal thiết lập mức lương cho nhân viên
   const handleOpenSalary = (emp) => {
     setSalaryEmployee(emp);
+    const isManager =
+      (emp.ChucVu && emp.ChucVu.toLowerCase().includes("quản lý")) ||
+      Number(emp.MaVaiTro) === 2;
+    const isFullTimeOrMgr = emp.LoaiNhanVien === "Full-time" || isManager;
+    const currentSalary = emp.base_salary || emp.Luong;
+
     setSalaryForm({
-      loaiNhanVien: emp.LoaiNhanVien === "Part-time" ? "Part-time" : "Full-time",
-      luong: emp.Luong && Number(emp.Luong) > 0 ? String(Math.round(Number(emp.Luong))) : "",
+      loaiNhanVien: isFullTimeOrMgr ? "Full-time" : "Part-time",
+      luong:
+        currentSalary && Number(currentSalary) > 0
+          ? String(Math.round(Number(currentSalary)))
+          : "",
     });
     setSalaryError("");
   };
 
-  // Lưu mức lương mới qua API cập nhật nhân viên (ghi chú loại lương HOURLY cho Part-time)
+  // Lưu mức lương mới qua API (cập nhật cột base_salary và ghi chú MONTHLY cho Full-time/Quản lý)
   const handleSaveSalary = async (e) => {
     e.preventDefault();
     const cleanedSalary = salaryForm.luong
@@ -321,20 +336,32 @@ export default function EmployeeManagement() {
     setSalaryError("");
     setSavingSalary(true);
     try {
-      const isPart = salaryForm.loaiNhanVien === "Part-time";
+      const isManager =
+        (salaryEmployee.ChucVu && salaryEmployee.ChucVu.toLowerCase().includes("quản lý")) ||
+        Number(salaryEmployee.MaVaiTro) === 2;
+      const isFullTimeOrMgr = salaryForm.loaiNhanVien === "Full-time" || isManager;
+      const isPart = !isFullTimeOrMgr && salaryForm.loaiNhanVien === "Part-time";
+
       const payload = {
-        loaiNhanVien: salaryForm.loaiNhanVien,
+        loaiNhanVien: isFullTimeOrMgr ? "Full-time" : "Part-time",
+        base_salary: cleanedSalary,
         luong: cleanedSalary,
+        salary: cleanedSalary,
         loaiLuong: isPart ? "HOURLY" : "MONTHLY",
         ghiChu: isPart ? "HOURLY" : "MONTHLY",
       };
-      const res = await axios.put(`${API_BASE}/employees/${salaryEmployee.MaNhanVien}`, payload);
+      const res = await axios.put(
+        `${API_BASE}/employees/${salaryEmployee.MaNhanVien}/salary`,
+        payload
+      );
       if (res.data && res.data.success) {
         setActionNotice(
-          `Đã cập nhật mức lương cho "${salaryEmployee.HoTen}": ${formatMoney(String(cleanedSalary))} VNĐ / ${SALARY_RANGE[salaryForm.loaiNhanVien].unit} (${isPart ? "Loại lương: HOURLY" : "Lương tháng"}).`
+          isFullTimeOrMgr
+            ? `Đã cập nhật Lương cứng hàng tháng (base_salary) cho "${salaryEmployee.HoTen}": ${formatMoney(String(cleanedSalary))} VNĐ/tháng (Loại lương: MONTHLY).`
+            : `Đã cập nhật mức lương theo giờ cho "${salaryEmployee.HoTen}": ${formatMoney(String(cleanedSalary))} VNĐ/giờ (Loại lương: HOURLY).`
         );
         setSalaryEmployee(null);
-        fetchEmployees(search);
+        fetchEmployees({});
       }
     } catch (err) {
       setSalaryError(
@@ -1302,18 +1329,18 @@ export default function EmployeeManagement() {
                 {/* Mức lương (Tự động chuyển đổi theo loại nhân viên) */}
                 <div>
                   <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, color: "#1e293b", marginBottom: "6px" }}>
-                    {form.loaiNhanVien === "Part-time"
-                      ? "Lương cơ bản theo giờ (VNĐ/giờ)"
-                      : "Lương cơ bản (VNĐ/tháng)"}{" "}
+                    {(form.loaiNhanVien === "Full-time" || (form.chucVu && form.chucVu.toLowerCase().includes("quản lý")) || Number(form.maVaiTro) === 2)
+                      ? "Lương cứng hàng tháng (VNĐ/tháng)"
+                      : "Lương cơ bản theo giờ (VNĐ/giờ)"}{" "}
                     <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <input
                     type="text"
                     inputMode="numeric"
                     placeholder={
-                      form.loaiNhanVien === "Part-time"
-                        ? "Ví dụ: 22,000 VNĐ/giờ"
-                        : "Ví dụ: 6,500,000 VNĐ/tháng"
+                      (form.loaiNhanVien === "Full-time" || (form.chucVu && form.chucVu.toLowerCase().includes("quản lý")) || Number(form.maVaiTro) === 2)
+                        ? "Ví dụ: 8,000,000 VNĐ/tháng"
+                        : "Ví dụ: 22,000 VNĐ/giờ"
                     }
                     value={form.luong ? formatMoney(String(form.luong).replace(/\D/g, "")) : ""}
                     onChange={(e) => {
@@ -1493,10 +1520,15 @@ export default function EmployeeManagement() {
       {/* MODAL 3: THIẾT LẬP MỨC LƯƠNG CHO ADMIN (QH-27) */}
       {/* ========================================================================= */}
       {salaryEmployee && (() => {
-        const range = SALARY_RANGE[salaryForm.loaiNhanVien];
+        const isSalaryManager =
+          (salaryEmployee.ChucVu && salaryEmployee.ChucVu.toLowerCase().includes("quản lý")) ||
+          Number(salaryEmployee.MaVaiTro) === 2;
+        const isSalaryFullTimeOrManager = salaryEmployee.LoaiNhanVien === "Full-time" || isSalaryManager;
+        const effectiveType = isSalaryFullTimeOrManager ? "Full-time" : salaryForm.loaiNhanVien;
+        const range = SALARY_RANGE[effectiveType] || SALARY_RANGE["Full-time"];
         const amount = Number(salaryForm.luong || 0);
-        const currentAmount = Number(salaryEmployee.Luong || 0);
-        const currentIsPartTime = salaryEmployee.LoaiNhanVien === "Part-time";
+        const currentAmount = Number(salaryEmployee.base_salary || salaryEmployee.Luong || 0);
+        const currentIsPartTime = !isSalaryFullTimeOrManager && salaryEmployee.LoaiNhanVien === "Part-time";
         const outOfRange = amount > 0 && (amount < range.min || amount > range.max);
 
         return (
@@ -1578,7 +1610,7 @@ export default function EmployeeManagement() {
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
                     <span style={{ color: "#64748b", fontSize: "0.85rem" }}>Loại hợp đồng:</span>
                     <span style={{ fontWeight: 700, color: currentIsPartTime ? "#b45309" : "#1d4ed8", fontSize: "0.88rem" }}>
-                      {currentIsPartTime ? "Part-time (Lương giờ)" : "Full-time (Lương cứng)"}
+                      {currentIsPartTime ? "Part-time (Lương giờ)" : "Full-time (Lương cứng - MONTHLY)"}
                     </span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
@@ -1619,41 +1651,75 @@ export default function EmployeeManagement() {
                   </div>
                 )}
 
-                {/* Hình thức trả lương */}
-                <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "#334155", marginBottom: "6px" }}>
-                  Hình thức trả lương <span style={{ color: "#ef4444" }}>*</span>
-                </label>
-                <select
-                  value={salaryForm.loaiNhanVien}
-                  onChange={(e) => setSalaryForm({ ...salaryForm, loaiNhanVien: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: "9px 12px",
-                    borderRadius: "6px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "0.9rem",
-                    marginBottom: "16px",
-                  }}
-                >
-                  <option value="Full-time">Full-time - Lương cứng theo tháng</option>
-                  <option value="Part-time">Part-time - Lương theo giờ</option>
-                </select>
+                {/* Nếu nhân viên được đánh dấu là "Full-time" hoặc "Quản lý" -> Form chỉ hiện ô nhập "Lương cứng hàng tháng" (VNĐ/tháng) */}
+                {isSalaryFullTimeOrManager ? (
+                  <div style={{ marginBottom: "16px" }}>
+                    <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "#334155", marginBottom: "6px" }}>
+                      Chế độ hợp đồng & Lương
+                    </label>
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        backgroundColor: "#eff6ff",
+                        border: "1px solid #bfdbfe",
+                        borderRadius: "8px",
+                        color: "#1e40af",
+                        fontSize: "0.88rem",
+                        fontWeight: 600,
+                      }}
+                    >
+                      💼 Nhân viên được đánh dấu là{" "}
+                      <strong>{isSalaryManager ? "Quản lý" : "Full-time"}</strong> — Chế độ{" "}
+                      <strong>Lương cứng hàng tháng (MONTHLY)</strong>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Hình thức trả lương cho Part-time */}
+                    <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "#334155", marginBottom: "6px" }}>
+                      Hình thức trả lương <span style={{ color: "#ef4444" }}>*</span>
+                    </label>
+                    <select
+                      value={salaryForm.loaiNhanVien}
+                      onChange={(e) => setSalaryForm({ ...salaryForm, loaiNhanVien: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "9px 12px",
+                        borderRadius: "6px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "0.9rem",
+                        marginBottom: "16px",
+                      }}
+                    >
+                      <option value="Part-time">Part-time - Lương theo giờ</option>
+                      <option value="Full-time">Full-time - Lương cứng theo tháng</option>
+                    </select>
+                  </>
+                )}
 
                 {/* Mức lương mới (định dạng hàng nghìn) */}
                 <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "#334155", marginBottom: "6px" }}>
-                  {salaryForm.loaiNhanVien === "Part-time"
-                    ? "Lương cơ bản theo giờ (VNĐ/giờ)"
-                    : "Lương cơ bản theo tháng (VNĐ/tháng)"}{" "}
+                  {isSalaryFullTimeOrManager
+                    ? "Lương cứng hàng tháng (VNĐ/tháng)"
+                    : (salaryForm.loaiNhanVien === "Part-time"
+                        ? "Lương cơ bản theo giờ (VNĐ/giờ)"
+                        : "Lương cứng hàng tháng (VNĐ/tháng)")}{" "}
                   <span style={{ color: "#ef4444" }}>*</span>
                 </label>
                 <MoneyInput
                   autoFocus
                   value={salaryForm.luong}
                   onChange={(digits) => setSalaryForm({ ...salaryForm, luong: digits })}
-                  placeholder={salaryForm.loaiNhanVien === "Part-time" ? "Ví dụ: 22,000 VNĐ/giờ" : "Ví dụ: 6,500,000"}
+                  placeholder={
+                    isSalaryFullTimeOrManager
+                      ? "Ví dụ: 8,000,000 VNĐ/tháng"
+                      : (salaryForm.loaiNhanVien === "Part-time"
+                          ? "Ví dụ: 22,000 VNĐ/giờ"
+                          : "Ví dụ: 8,000,000 VNĐ/tháng")
+                  }
                 />
                 {/* Gợi ý chọn nhanh lương giờ Part-time */}
-                {salaryForm.loaiNhanVien === "Part-time" && (
+                {!isSalaryFullTimeOrManager && salaryForm.loaiNhanVien === "Part-time" && (
                   <div style={{ display: "flex", gap: "6px", marginTop: "8px", flexWrap: "wrap", alignItems: "center" }}>
                     <span style={{ fontSize: "0.75rem", color: "#64748b" }}>Gợi ý lương giờ:</span>
                     {["22000", "25000", "30000"].map((rate) => (

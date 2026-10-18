@@ -64,8 +64,8 @@ export function EmployeeDetailModal({ employee, onClose, onEdit }) {
           <InfoRow label="Vai trò hệ thống" value={detail.TenVaiTro} />
           <InfoRow label="Loại hợp đồng" value={isPartTime ? "Part-time (Lương giờ - HOURLY)" : "Full-time (Lương cứng - MONTHLY)"} />
           <InfoRow
-            label={isPartTime ? "Lương cơ bản theo giờ" : "Lương cơ bản hàng tháng"}
-            value={Number(detail.Luong) > 0 ? `${formatMoney(detail.Luong)} VNĐ / ${isPartTime ? "giờ" : "tháng"}` : "Chưa đặt"}
+            label={isPartTime ? "Lương cơ bản theo giờ" : "Lương cứng hàng tháng"}
+            value={Number(detail.base_salary || detail.Luong) > 0 ? `${formatMoney(detail.base_salary || detail.Luong)} VNĐ / ${isPartTime ? "giờ" : "tháng"}` : "Chưa đặt"}
           />
           <InfoRow label="Ghi chú loại lương" value={detail.LoaiLuong || (isPartTime ? "HOURLY" : "MONTHLY")} />
           <InfoRow label="Ngày vào làm" value={joinDate ? formatDateVN(String(joinDate).slice(0, 10)) : ""} />
@@ -120,13 +120,21 @@ export function EmployeeEditModal({ employee, onClose, onSaved }) {
     if (!validate()) return;
     setSaving(true);
     try {
-      const isPart = form.loaiNhanVien === "Part-time";
+      const isManager =
+        (form.chucVu && form.chucVu.toLowerCase().includes("quản lý")) ||
+        Number(form.maVaiTro) === 2;
+      const isFullTimeOrManager = form.loaiNhanVien === "Full-time" || isManager;
+      const isPart = !isFullTimeOrManager && form.loaiNhanVien === "Part-time";
       const cleanedSalary = form.luong ? Number(String(form.luong).replace(/\D/g, "")) : 0;
+
       const res = await axios.put(`${API_BASE}/employees/${employee.MaNhanVien}`, {
         ...form,
         hoTen: form.hoTen.trim(),
         maVaiTro: Number(form.maVaiTro),
+        base_salary: cleanedSalary,
         luong: cleanedSalary,
+        salary: cleanedSalary,
+        loaiNhanVien: isFullTimeOrManager ? "Full-time" : "Part-time",
         loaiLuong: isPart ? "HOURLY" : "MONTHLY",
         ghiChu: isPart ? "HOURLY" : "MONTHLY",
       });
@@ -234,11 +242,17 @@ export function EmployeeEditModal({ employee, onClose, onSaved }) {
             )}
             {field(
               "luong",
-              form.loaiNhanVien === "Part-time" ? "Lương cơ bản theo giờ (VNĐ/giờ)" : "Lương cơ bản (VNĐ/tháng)",
+              ((form.chucVu && form.chucVu.toLowerCase().includes("quản lý")) || Number(form.maVaiTro) === 2 || form.loaiNhanVien === "Full-time")
+                ? "Lương cứng hàng tháng (VNĐ/tháng)"
+                : "Lương cơ bản theo giờ (VNĐ/giờ)",
               <input
                 className="sw-input"
                 inputMode="numeric"
-                placeholder={form.loaiNhanVien === "Part-time" ? "Ví dụ: 22,000 VNĐ/giờ" : "Ví dụ: 6,500,000 VNĐ/tháng"}
+                placeholder={
+                  ((form.chucVu && form.chucVu.toLowerCase().includes("quản lý")) || Number(form.maVaiTro) === 2 || form.loaiNhanVien === "Full-time")
+                    ? "Ví dụ: 8,000,000 VNĐ/tháng"
+                    : "Ví dụ: 22,000 VNĐ/giờ"
+                }
                 value={form.luong ? formatMoney(String(form.luong).replace(/\D/g, "")) : ""}
                 onChange={(e) => {
                   const digits = e.target.value.replace(/\D/g, "");

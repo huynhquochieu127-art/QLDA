@@ -17,6 +17,7 @@ async function ensureEmployeeSchema(conn) {
     "ALTER TABLE nhanvien ADD COLUMN ChucVu VARCHAR(50) NULL",
     "ALTER TABLE nhanvien ADD COLUMN LoaiLuong VARCHAR(20) DEFAULT 'MONTHLY'",
     "ALTER TABLE nhanvien ADD COLUMN GhiChu TEXT NULL",
+    "ALTER TABLE nhanvien ADD COLUMN base_salary DECIMAL(18,2) NULL",
   ];
   for (const sql of alterStatements) {
     try {
@@ -27,13 +28,16 @@ async function ensureEmployeeSchema(conn) {
       }
     }
   }
-  // Đồng bộ giá trị LoaiLuong cho các bản ghi cũ nếu chưa có
+  // Đồng bộ giá trị LoaiLuong và base_salary cho các bản ghi cũ nếu chưa có
   try {
     await target.query(
       "UPDATE nhanvien SET LoaiLuong = 'HOURLY', GhiChu = COALESCE(GhiChu, 'HOURLY') WHERE LoaiNhanVien = 'Part-time' AND (LoaiLuong IS NULL OR LoaiLuong != 'HOURLY')"
     );
     await target.query(
       "UPDATE nhanvien SET LoaiLuong = 'MONTHLY' WHERE LoaiNhanVien = 'Full-time' AND (LoaiLuong IS NULL OR LoaiLuong != 'MONTHLY')"
+    );
+    await target.query(
+      "UPDATE nhanvien SET base_salary = Luong WHERE base_salary IS NULL AND Luong IS NOT NULL"
     );
   } catch (e) {}
   schemaEnsured = true;
@@ -91,6 +95,7 @@ exports.createEmployee = async (req, res) => {
       startDate,
       luong,
       salary,
+      base_salary,
       maVaiTro,
       roleId,
       role,
@@ -108,23 +113,6 @@ exports.createEmployee = async (req, res) => {
     const finalAddress = (diaChi || address || "").trim();
     const finalPosition = (chucVu || position || "Nhân viên").trim();
 
-    // Phân loại hợp đồng: Full-time (Lương cứng) hoặc Part-time (Lương theo giờ HOURLY)
-    const rawEmp = (loaiNhanVien || employeeType || "Full-time").toString().trim();
-    const isPartTime =
-      rawEmp.toLowerCase().includes("part") ||
-      (loaiLuong && String(loaiLuong).toUpperCase() === "HOURLY");
-    const finalEmpType = isPartTime ? "Part-time" : "Full-time";
-    const finalLoaiLuong = isPartTime ? "HOURLY" : "MONTHLY";
-
-    const rawSalary = luong !== undefined ? luong : salary;
-    const finalSalary =
-      rawSalary !== undefined && rawSalary !== null && rawSalary !== ""
-        ? Number(String(rawSalary).replace(/[^\d.]/g, ""))
-        : 0;
-
-    // Yêu cầu: Ghi chú loại lương là HOURLY
-    const finalGhiChu = ghiChu ? String(ghiChu).trim() : (isPartTime ? "HOURLY" : "MONTHLY");
-
     // Xác định vai trò (Mặc định 3 = Nhân viên, 2 = Quản lý, 1 = Admin)
     let finalRoleId = 3;
     const rawRole = maVaiTro || roleId || role;
@@ -138,6 +126,30 @@ exports.createEmployee = async (req, res) => {
         finalRoleId = 3;
       }
     }
+
+    // Phân loại hợp đồng: Nếu là "Full-time" hoặc "Quản lý" -> Lương cứng MONTHLY (base_salary)
+    const isManagerRole = finalPosition.toLowerCase().includes("quản lý") || finalRoleId === 2;
+    const rawEmp = (loaiNhanVien || employeeType || "Full-time").toString().trim();
+    const isPartTime =
+      !isManagerRole &&
+      (rawEmp.toLowerCase().includes("part") ||
+        (loaiLuong && String(loaiLuong).toUpperCase() === "HOURLY"));
+    const finalEmpType = isPartTime ? "Part-time" : "Full-time";
+    const finalLoaiLuong = isPartTime ? "HOURLY" : "MONTHLY";
+
+    const rawSalary =
+      base_salary !== undefined
+        ? base_salary
+        : (luong !== undefined ? luong : salary);
+    const finalSalary =
+      rawSalary !== undefined && rawSalary !== null && rawSalary !== ""
+        ? Number(String(rawSalary).replace(/[^\d.]/g, ""))
+        : 0;
+
+    // Yêu cầu: Ghi chú loại lương là MONTHLY cho Full-time / Quản lý, hoặc HOURLY cho Part-time
+    const finalGhiChu = isPartTime
+      ? (ghiChu ? String(ghiChu).trim() : "HOURLY")
+      : "MONTHLY";
 
     // 1. Kiểm tra các trường bắt buộc
     if (!finalHoTen) {
@@ -209,12 +221,12 @@ exports.createEmployee = async (req, res) => {
     // 4.3. Sinh mã nhân viên tự động (NV001, NV002,...)
     const maNhanVienCode = await generateEmployeeCode(connection);
 
-    // 4.4. Thêm vào bảng nhanvien (Employees) kèm loại lương HOURLY / MONTHLY và ghi chú
+    // 4.4. Thêm vào bảng nhanvien (Employees) kèm base_salary, loại lương HOURLY / MONTHLY và ghi chú
     const [empResult] = await connection.query(
       `INSERT INTO nhanvien (
         MaTaiKhoan, MaNhanVienCode, HoTen, GioiTinh, SoDienThoai, CCCD,
-        DiaChi, ChucVu, LoaiNhanVien, LoaiLuong, GhiChu, NgayVaoLam, Luong, TrangThai
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        DiaChi, ChucVu, LoaiNhanVien, LoaiLuong, GhiChu, NgayVaoLam, Luong, base_salary, TrangThai
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         maTaiKhoan,
         maNhanVienCode,
@@ -228,6 +240,7 @@ exports.createEmployee = async (req, res) => {
         finalLoaiLuong,
         finalGhiChu,
         ngayVaoLam ? new Date(ngayVaoLam) : new Date(),
+        finalSalary,
         finalSalary,
         "Đang làm việc",
       ]
@@ -292,6 +305,7 @@ exports.createEmployee = async (req, res) => {
         ghiChu: finalGhiChu,
         vaiTro: tenVaiTro,
         maVaiTro: finalRoleId,
+        base_salary: finalSalary,
         luong: finalSalary,
         donVi: isPartTime ? "VNĐ/giờ" : "VNĐ/tháng",
         trangThai: "Đang làm việc",
@@ -378,7 +392,8 @@ exports.getAllEmployees = async (req, res) => {
           COALESCE(nv.LoaiLuong, IF(nv.LoaiNhanVien = 'Part-time', 'HOURLY', 'MONTHLY')) AS LoaiLuong,
           COALESCE(nv.GhiChu, IF(nv.LoaiNhanVien = 'Part-time', 'HOURLY', '')) AS GhiChu,
           DATE_FORMAT(nv.NgayVaoLam, '%Y-%m-%d') AS NgayVaoLam,
-          nv.Luong,
+          COALESCE(nv.base_salary, nv.Luong) AS base_salary,
+          COALESCE(nv.base_salary, nv.Luong) AS Luong,
           nv.TrangThai,
           tk.MaTaiKhoan,
           tk.Email,
@@ -434,6 +449,7 @@ exports.getEmployeeById = async (req, res) => {
     const [rows] = await db.query(
       `SELECT 
         nv.*,
+        COALESCE(nv.base_salary, nv.Luong) AS base_salary,
         COALESCE(nv.LoaiLuong, IF(nv.LoaiNhanVien = 'Part-time', 'HOURLY', 'MONTHLY')) AS LoaiLuong,
         COALESCE(nv.GhiChu, IF(nv.LoaiNhanVien = 'Part-time', 'HOURLY', '')) AS GhiChu,
         DATE_FORMAT(nv.NgayVaoLam, '%Y-%m-%d') as NgayVaoLamFormatted,
@@ -483,6 +499,7 @@ exports.updateEmployee = async (req, res) => {
       ngayVaoLam,
       luong,
       salary,
+      base_salary,
       trangThai,
       maVaiTro,
       trangThaiHoatDong,
@@ -529,23 +546,29 @@ exports.updateEmployee = async (req, res) => {
       }
     }
 
-    // Yêu cầu: Ghi chú loại lương là HOURLY nếu là Part-time
-    let finalGhiChu = ghiChu;
-    if (finalGhiChu === undefined) {
-      if (isPartTime) {
-        finalGhiChu = "HOURLY";
-      } else if (loaiNhanVien !== undefined) {
-        finalGhiChu = "MONTHLY";
-      }
+    // Yêu cầu: Ghi chú loại lương là HOURLY nếu là Part-time, MONTHLY nếu là Full-time hoặc Quản lý
+    const isManagerRole =
+      (chucVu && chucVu.toLowerCase().includes("quản lý")) ||
+      (currentEmp.ChucVu && currentEmp.ChucVu.toLowerCase().includes("quản lý")) ||
+      (maVaiTro !== undefined && Number(maVaiTro) === 2);
+
+    if (isManagerRole || finalLoaiNhanVien === "Full-time") {
+      isPartTime = false;
+      finalLoaiNhanVien = "Full-time";
+      finalLoaiLuong = "MONTHLY";
+      finalGhiChu = "MONTHLY";
+    } else if (finalGhiChu === undefined) {
+      finalGhiChu = isPartTime ? "HOURLY" : "MONTHLY";
     }
 
-    const rawSalary = luong !== undefined ? luong : salary;
+    const rawSalary =
+      base_salary !== undefined ? base_salary : (luong !== undefined ? luong : salary);
     const parsedSalary =
       rawSalary !== undefined && rawSalary !== null && rawSalary !== ""
         ? Number(String(rawSalary).replace(/[^\d.]/g, ""))
         : null;
 
-    // Cập nhật bảng nhanvien
+    // Cập nhật bảng nhanvien (cập nhật cả Luong và base_salary)
     await connection.query(
       `UPDATE nhanvien SET 
         HoTen = COALESCE(?, HoTen),
@@ -559,6 +582,7 @@ exports.updateEmployee = async (req, res) => {
         GhiChu = COALESCE(?, GhiChu),
         NgayVaoLam = COALESCE(?, NgayVaoLam),
         Luong = COALESCE(?, Luong),
+        base_salary = COALESCE(?, base_salary),
         TrangThai = COALESCE(?, TrangThai)
        WHERE MaNhanVien = ?`,
       [
@@ -572,6 +596,7 @@ exports.updateEmployee = async (req, res) => {
         finalLoaiLuong || null,
         finalGhiChu !== undefined ? finalGhiChu : null,
         ngayVaoLam ? new Date(ngayVaoLam) : null,
+        parsedSalary,
         parsedSalary,
         trangThai || null,
         id,
@@ -606,6 +631,7 @@ exports.updateEmployee = async (req, res) => {
         loaiNhanVien: finalLoaiNhanVien,
         loaiLuong: finalLoaiLuong,
         ghiChu: finalGhiChu,
+        base_salary: parsedSalary,
         luong: parsedSalary,
         donVi: isPartTime ? "VNĐ/giờ" : "VNĐ/tháng",
       },
@@ -620,16 +646,19 @@ exports.updateEmployee = async (req, res) => {
 
 /**
  * [PUT / PATCH] /api/employees/:id/salary
- * API nhận số tiền lương và cập nhật vào CSDL, ghi chú loại lương là HOURLY (hoặc MONTHLY)
+ * API nhận số tiền này và cập nhật vào cột base_salary của nhân viên đó trong CSDL, ghi chú loại lương là MONTHLY.
  */
 exports.updateEmployeeSalary = async (req, res) => {
   const connection = await db.getConnection();
   try {
     await ensureEmployeeSchema(connection);
     const { id } = req.params;
-    const { luong, salary, amount, loaiNhanVien, loaiLuong, ghiChu } = req.body;
+    const { luong, salary, amount, base_salary, loaiNhanVien, loaiLuong, ghiChu } = req.body;
 
-    const rawSalary = luong !== undefined ? luong : (salary !== undefined ? salary : amount);
+    const rawSalary =
+      base_salary !== undefined
+        ? base_salary
+        : (luong !== undefined ? luong : (salary !== undefined ? salary : amount));
     if (rawSalary === undefined || rawSalary === null || rawSalary === "") {
       return res.status(400).json({
         success: false,
@@ -646,7 +675,10 @@ exports.updateEmployeeSalary = async (req, res) => {
     }
 
     const [empRows] = await connection.query(
-      "SELECT MaNhanVien, HoTen, LoaiNhanVien FROM nhanvien WHERE MaNhanVien = ?",
+      `SELECT nv.MaNhanVien, nv.HoTen, nv.LoaiNhanVien, nv.ChucVu, tk.MaVaiTro 
+       FROM nhanvien nv
+       LEFT JOIN taikhoan tk ON nv.MaTaiKhoan = tk.MaTaiKhoan
+       WHERE nv.MaNhanVien = ?`,
       [id]
     );
 
@@ -658,37 +690,50 @@ exports.updateEmployeeSalary = async (req, res) => {
     }
 
     const currentEmp = empRows[0];
+    const isManager =
+      (currentEmp.ChucVu && currentEmp.ChucVu.toLowerCase().includes("quản lý")) ||
+      Number(currentEmp.MaVaiTro) === 2 ||
+      (req.body.chucVu && req.body.chucVu.toLowerCase().includes("quản lý")) ||
+      (req.body.maVaiTro !== undefined && Number(req.body.maVaiTro) === 2);
+
     const targetType = loaiNhanVien || currentEmp.LoaiNhanVien || "Full-time";
     const isPartTime =
-      targetType.toLowerCase().includes("part") ||
-      (loaiLuong && String(loaiLuong).toUpperCase() === "HOURLY");
+      !isManager &&
+      (targetType.toLowerCase().includes("part") ||
+        (loaiLuong && String(loaiLuong).toUpperCase() === "HOURLY"));
 
-    const finalLoaiNhanVien = isPartTime ? "Part-time" : "Full-time";
-    const finalLoaiLuong = isPartTime ? "HOURLY" : "MONTHLY";
-    // Yêu cầu: Ghi chú loại lương là HOURLY khi là Part-time
-    const finalGhiChu = ghiChu ? String(ghiChu).trim() : (isPartTime ? "HOURLY" : "MONTHLY");
+    // Yêu cầu: Nếu nhân viên được đánh dấu là "Full-time" hoặc "Quản lý" (đã làm ở Task QH-23)
+    // -> API nhận số tiền này và cập nhật vào cột base_salary của nhân viên đó trong CSDL, ghi chú loại lương là MONTHLY.
+    const isMonthly = !isPartTime;
+    const finalLoaiNhanVien = isMonthly ? "Full-time" : "Part-time";
+    const finalLoaiLuong = isMonthly ? "MONTHLY" : "HOURLY";
+    const finalGhiChu = isMonthly ? "MONTHLY" : (ghiChu ? String(ghiChu).trim() : "HOURLY");
 
     await connection.query(
       `UPDATE nhanvien SET 
+        base_salary = ?, 
         Luong = ?, 
         LoaiNhanVien = ?, 
         LoaiLuong = ?, 
         GhiChu = ? 
        WHERE MaNhanVien = ?`,
-      [finalSalary, finalLoaiNhanVien, finalLoaiLuong, finalGhiChu, id]
+      [finalSalary, finalSalary, finalLoaiNhanVien, finalLoaiLuong, finalGhiChu, id]
     );
 
     return res.json({
       success: true,
-      message: `Cập nhật mức lương cho ${currentEmp.HoTen} thành công! Loại lương: ${finalLoaiLuong}`,
+      message: isMonthly
+        ? `Cập nhật lương cứng hàng tháng (base_salary) cho ${currentEmp.HoTen} thành công!`
+        : `Cập nhật mức lương cho ${currentEmp.HoTen} thành công! Loại lương: ${finalLoaiLuong}`,
       data: {
         maNhanVien: Number(id),
         hoTen: currentEmp.HoTen,
+        base_salary: finalSalary,
         luong: finalSalary,
         loaiNhanVien: finalLoaiNhanVien,
         loaiLuong: finalLoaiLuong,
         ghiChu: finalGhiChu,
-        donVi: isPartTime ? "VNĐ/giờ" : "VNĐ/tháng",
+        donVi: isMonthly ? "VNĐ/tháng" : "VNĐ/giờ",
       },
     });
   } catch (error) {
