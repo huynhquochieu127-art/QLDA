@@ -6,21 +6,24 @@ const verifyToken = (req, res, next) => {
   const token = authHeader && authHeader.split(" ")[1];
 
   if (!token) {
-    return res.status(401).json({ 
-      success: false, 
-      message: "Không tìm thấy Token, truy cập bị từ chối!" 
+    return res.status(401).json({
+      success: false,
+      message: "Không tìm thấy Token, truy cập bị từ chối!",
     });
   }
 
   try {
     // Xác thực token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "fallback_secret_key");
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "fallback_secret_key",
+    );
     req.user = decoded; // Lưu thông tin user vào request để các middleware/route sau sử dụng
     next();
   } catch (error) {
-    return res.status(403).json({ 
-      success: false, 
-      message: "Token không hợp lệ hoặc đã hết hạn!" 
+    return res.status(403).json({
+      success: false,
+      message: "Token không hợp lệ hoặc đã hết hạn!",
     });
   }
 };
@@ -30,15 +33,25 @@ const verifyRole = (roles) => {
   return (req, res, next) => {
     // Giả sử bảng tài khoản có cột 'Quyen' hoặc 'Role'
     const userRole = req.user.Quyen || req.user.Role || req.user.role;
-    
+
     if (!req.user || !roles.includes(userRole)) {
-      return res.status(403).json({ 
-        success: false, 
-        message: "Bạn không có quyền (sai quyền) truy cập API này!" 
+      return res.status(403).json({
+        success: false,
+        message: "Bạn không có quyền (sai quyền) truy cập API này!",
       });
     }
     next();
   };
 };
 
+const checkRole = (roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res
+        .status(403)
+        .json({ message: "Bạn không có quyền thực hiện thao tác này!" });
+    }
+    next();
+  };
+};
 module.exports = { verifyToken, verifyRole };

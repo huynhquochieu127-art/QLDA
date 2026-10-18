@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import "../../css/pos.css";
+import PosSuggestions from "./PosSuggestions";
 
 const CATEGORIES = [
   { id: "all", name: "Tất cả" },
@@ -594,6 +595,9 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
             ))
           )}
         </div>
+
+        {/* Món gọi kèm gợi ý từ AI (QH-95) */}
+        <PosSuggestions cart={cart} products={PRODUCTS} onAdd={addToCart} />
 
         {/* Tổng tiền & Thanh toán */}
         <div className="sidebar-footer">
