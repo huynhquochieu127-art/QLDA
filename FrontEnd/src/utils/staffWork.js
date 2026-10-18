@@ -75,6 +75,7 @@ export const getCurrentUser = () => {
     name: user.name || user.HoTen || "Nhân viên",
     position: user.chucVu || user.ChucVu || user.role || "Nhân viên",
     email: user.email || "",
+    loaiNhanVien: user.loaiNhanVien || user.LoaiNhanVien || "Part-time",
   };
 };
 

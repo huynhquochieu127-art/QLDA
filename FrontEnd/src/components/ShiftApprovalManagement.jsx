@@ -25,8 +25,10 @@ import {
   UserCheck,
   Coffee,
 } from "lucide-react";
+import axios from "axios";
 import "../../css/shifts.css";
-import { toDateKey, formatDateVN } from "../utils/staffWork";
+import { toDateKey, formatDateVN, API_BASE } from "../utils/staffWork";
+import PartTimeShiftConfig from "./PartTimeShiftConfig";
 
 // 3 Ca làm việc tiêu chuẩn trong ngày
 const SHIFT_TYPES = [
@@ -88,6 +90,7 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
   const [newTargetDate, setNewTargetDate] = useState("");
 
   const [showAssignModal, setShowAssignModal] = useState(false); // Xếp thêm ca
+  const [showConfigModal, setShowConfigModal] = useState(false); // Cấu hình 3 ca Part-time
   const [assignForm, setAssignForm] = useState({
     staffId: "",
     staffName: "",
@@ -99,11 +102,12 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
   // Filter trong Table View
   const [tableFilterStatus, setTableFilterStatus] = useState("all");
   const [tableFilterShift, setTableFilterShift] = useState("all");
+  const [tableFilterWeek, setTableFilterWeek] = useState("all");
 
   const [bannerNotice, setBannerNotice] = useState("");
 
   // Lấy danh sách nhân viên từ hệ thống để gán vào ca
-  const availableStaff = [
+  const [availableStaff, setAvailableStaff] = useState([
     { id: "NV001", name: "Nguyễn Hải Hậu", role: "Quản trị viên" },
     { id: "NV002", name: "Trần Minh Quang", role: "Quản lý" },
     { id: "NV003", name: "Lê Thị Thảo", role: "Thu ngân" },
@@ -112,7 +116,26 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
     { id: "NV006", name: "Đỗ Đăng Khoa", role: "Pha chế" },
     { id: "NV007", name: "Bùi Thị Mai", role: "Phục vụ" },
     { id: "NV008", name: "Ngô Văn Phát", role: "Pha chế" },
-  ];
+  ]);
+
+  useEffect(() => {
+    axios
+      .get(`${API_BASE}/employees`)
+      .then((res) => {
+        const list = res.data?.data?.data || res.data?.data || res.data;
+        if (Array.isArray(list) && list.length > 0) {
+          setAvailableStaff(
+            list.map((emp) => ({
+              id: emp.MaNhanVienCode || `NV${String(emp.MaNhanVien || emp.id).padStart(3, "0")}`,
+              maNhanVien: emp.MaNhanVien || emp.id,
+              name: emp.HoTen || emp.name,
+              role: emp.ChucVu || emp.position || "Nhân viên",
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Tính 7 ngày trong tuần từ currentWeekStart
   const weekDays = Array.from({ length: 7 }, (_, i) => {
@@ -136,111 +159,30 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
     };
   });
 
-  // Dữ liệu mẫu khởi tạo ca đăng ký tuần
-  const generateInitialShifts = () => {
-    const list = [];
-    let idCounter = 1;
 
-    weekDays.forEach((day, dayIdx) => {
-      // Ca sáng
-      list.push({
-        id: `REG-${idCounter++}`,
-        staffId: "NV003",
-        staffName: "Lê Thị Thảo",
-        role: "Thu ngân",
-        dateKey: day.dateKey,
-        shiftType: "morning",
-        status: dayIdx < 3 ? "approved" : "pending",
-        registeredAt: "01/10/2026",
-      });
-      list.push({
-        id: `REG-${idCounter++}`,
-        staffId: "NV004",
-        staffName: "Phạm Quốc Tuấn",
-        role: "Pha chế",
-        dateKey: day.dateKey,
-        shiftType: "morning",
-        status: "approved",
-        registeredAt: "01/10/2026",
-      });
 
-      // Ca chiều
-      list.push({
-        id: `REG-${idCounter++}`,
-        staffId: "NV005",
-        staffName: "Vũ Hoàng Yến",
-        role: "Thu ngân",
-        dateKey: day.dateKey,
-        shiftType: "afternoon",
-        status: dayIdx % 2 === 0 ? "approved" : "pending",
-        registeredAt: "02/10/2026",
-      });
-      if (dayIdx % 2 === 0) {
-        list.push({
-          id: `REG-${idCounter++}`,
-          staffId: "NV006",
-          staffName: "Đỗ Đăng Khoa",
-          role: "Pha chế",
-          dateKey: day.dateKey,
-          shiftType: "afternoon",
-          status: "pending",
-          registeredAt: "02/10/2026",
-        });
+  // State lưu danh sách ca làm việc từ CSDL MySQL (bảng dangky_ca)
+  const [shiftRegistrations, setShiftRegistrations] = useState([]);
+  const [loadingShifts, setLoadingShifts] = useState(false);
+
+  // Tải dữ liệu đăng ký ca từ Database API
+  const fetchShiftRegistrations = async () => {
+    try {
+      setLoadingShifts(true);
+      const res = await axios.get(`${API_BASE}/shifts/registrations`);
+      if (res.data?.success && Array.isArray(res.data.data)) {
+        setShiftRegistrations(res.data.data);
       }
-
-      // Ca tối
-      list.push({
-        id: `REG-${idCounter++}`,
-        staffId: "NV007",
-        staffName: "Bùi Thị Mai",
-        role: "Phục vụ",
-        dateKey: day.dateKey,
-        shiftType: "evening",
-        status: "approved",
-        registeredAt: "01/10/2026",
-      });
-      list.push({
-        id: `REG-${idCounter++}`,
-        staffId: "NV008",
-        staffName: "Ngô Văn Phát",
-        role: "Pha chế",
-        dateKey: day.dateKey,
-        shiftType: "evening",
-        status: "pending",
-        registeredAt: "03/10/2026",
-      });
-      if (dayIdx >= 4) {
-        list.push({
-          id: `REG-${idCounter++}`,
-          staffId: "NV002",
-          staffName: "Trần Minh Quang",
-          role: "Quản lý",
-          dateKey: day.dateKey,
-          shiftType: "evening",
-          status: "approved",
-          registeredAt: "01/10/2026",
-        });
-      }
-    });
-
-    return list;
+    } catch (err) {
+      console.error("Lỗi nạp danh sách ca làm từ Database:", err);
+    } finally {
+      setLoadingShifts(false);
+    }
   };
 
-  // State lưu danh sách ca làm việc (với localStorage để giữ khi reload)
-  const [shiftRegistrations, setShiftRegistrations] = useState(() => {
-    try {
-      const saved = localStorage.getItem("app_mock_shift_registrations");
-      if (saved) return JSON.parse(saved);
-    } catch (_) {}
-    return generateInitialShifts();
-  });
-
   useEffect(() => {
-    localStorage.setItem(
-      "app_mock_shift_registrations",
-      JSON.stringify(shiftRegistrations)
-    );
-  }, [shiftRegistrations]);
+    fetchShiftRegistrations();
+  }, [currentWeekStart]);
 
   // Điều hướng tuần
   const handlePrevWeek = () => {
@@ -265,59 +207,80 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
   };
 
   // ========================================================
-  // CÁC HÀNH ĐỘNG CỦA QUẢN LÝ: DUYỆT / TỪ CHỐI / CHUYỂN CA
+  // CÁC HÀNH ĐỘNG CỦA QUẢN LÝ: DUYỆT / TỪ CHỐI / CHUYỂN CA VÀO DATABASE
   // ========================================================
 
   // 1. Duyệt ca (Approve)
-  const handleApprove = (id, staffName) => {
-    setShiftRegistrations((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, status: "approved" } : item
-      )
-    );
-    setBannerNotice(`Đã duyệt ca làm cho nhân viên "${staffName}".`);
-  };
-
-  // 2. Từ chối ca (Reject)
-  const handleReject = (id, staffName) => {
-    setShiftRegistrations((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, status: "rejected" } : item
-      )
-    );
-    setBannerNotice(`Đã từ chối ca làm của nhân viên "${staffName}".`);
-  };
-
-  // 3. Duyệt tất cả ca đang chờ trong tuần
-  const handleApproveAll = () => {
-    const currentWeekDateKeys = weekDays.map((w) => w.dateKey);
-    let count = 0;
-
-    setShiftRegistrations((prev) =>
-      prev.map((item) => {
-        if (
-          currentWeekDateKeys.includes(item.dateKey) &&
-          item.status === "pending"
-        ) {
-          count++;
-          return { ...item, status: "approved" };
-        }
-        return item;
-      })
-    );
-
-    if (count > 0) {
-      setBannerNotice(`Đã duyệt đồng loạt ${count} ca làm việc đang chờ!`);
-    } else {
-      setBannerNotice("Không có ca nào đang chờ duyệt trong tuần này.");
+  const handleApprove = async (id, staffName) => {
+    try {
+      await axios.put(`${API_BASE}/shifts/registrations/${id}/status`, {
+        status: "approved",
+      });
+      setShiftRegistrations((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, status: "approved" } : item
+        )
+      );
+      setBannerNotice(`Đã duyệt ca làm cho nhân viên "${staffName}" vào CSDL.`);
+    } catch (err) {
+      alert("Lỗi khi duyệt ca làm: " + (err.response?.data?.message || err.message));
     }
   };
 
-  // 4. Xóa lượt xếp ca
-  const handleDeleteRegistration = (id, staffName) => {
-    if (window.confirm(`Hủy ca đăng ký của nhân viên "${staffName}"?`)) {
-      setShiftRegistrations((prev) => prev.filter((item) => item.id !== id));
-      setBannerNotice(`Đã xóa ca đăng ký của "${staffName}".`);
+  // 2. Từ chối ca (Reject)
+  const handleReject = async (id, staffName) => {
+    try {
+      await axios.put(`${API_BASE}/shifts/registrations/${id}/status`, {
+        status: "rejected",
+      });
+      setShiftRegistrations((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, status: "rejected" } : item
+        )
+      );
+      setBannerNotice(`Đã từ chối ca làm của nhân viên "${staffName}" trong CSDL.`);
+    } catch (err) {
+      alert("Lỗi khi từ chối ca làm: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // 3. Duyệt tất cả ca đang chờ trong tuần hoặc trên toàn hệ thống
+  const handleApproveAll = async () => {
+    const currentWeekDateKeys = weekDays.map((w) => w.dateKey);
+    const pendingThisWeek = currentWeekShifts.filter((s) => s.status === "pending").length;
+
+    let payload = { dateKeys: currentWeekDateKeys };
+    if (pendingThisWeek === 0 && allPendingShifts.length > 0) {
+      if (
+        window.confirm(
+          `Tuần hiện tại không có ca chờ duyệt. Bạn có muốn duyệt tất cả ${allPendingShifts.length} ca chờ duyệt trên toàn hệ thống (bao gồm tuần sau) không?`
+        )
+      ) {
+        payload = {}; // không giới hạn dateKeys -> duyệt tất cả ca pending
+      } else {
+        return;
+      }
+    }
+
+    try {
+      const res = await axios.put(`${API_BASE}/shifts/registrations/approve-all`, payload);
+      fetchShiftRegistrations();
+      setBannerNotice(res.data?.message || `Đã duyệt tất cả ca làm đang chờ!`);
+    } catch (err) {
+      alert("Lỗi khi duyệt đồng loạt ca: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // 4. Xóa lượt xếp ca khỏi CSDL
+  const handleDeleteRegistration = async (id, staffName) => {
+    if (window.confirm(`Hủy ca đăng ký của nhân viên "${staffName}" trong CSDL?`)) {
+      try {
+        await axios.delete(`${API_BASE}/shifts/registrations/${id}`);
+        setShiftRegistrations((prev) => prev.filter((item) => item.id !== id));
+        setBannerNotice(`Đã xóa ca đăng ký của "${staffName}" khỏi CSDL.`);
+      } catch (err) {
+        alert("Lỗi khi xóa ca làm: " + (err.response?.data?.message || err.message));
+      }
     }
   };
 
@@ -340,13 +303,12 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
     setDragOverSlot(null);
   };
 
-  const handleDrop = (e, targetDateKey, targetShiftType) => {
+  const handleDrop = async (e, targetDateKey, targetShiftType) => {
     e.preventDefault();
     setDragOverSlot(null);
 
     if (!draggedItem) return;
 
-    // Nếu thả vào chính ca đó thì không làm gì
     if (
       draggedItem.dateKey === targetDateKey &&
       draggedItem.shiftType === targetShiftType
@@ -355,29 +317,37 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
       return;
     }
 
-    // Cập nhật ca và ngày mới cho nhân viên
     const targetShiftName =
       SHIFT_TYPES.find((s) => s.id === targetShiftType)?.name || "Ca mới";
     const targetDay =
       weekDays.find((w) => w.dateKey === targetDateKey)?.dayLabel || targetDateKey;
 
-    setShiftRegistrations((prev) =>
-      prev.map((item) =>
-        item.id === draggedItem.id
-          ? {
-              ...item,
-              dateKey: targetDateKey,
-              shiftType: targetShiftType,
-              // Tự động chuyển thành approved nếu do Quản lý chủ động kéo xếp lại
-              status: "approved",
-            }
-          : item
-      )
-    );
+    try {
+      await axios.put(`${API_BASE}/shifts/registrations/${draggedItem.id}/reassign`, {
+        targetDateKey,
+        targetShiftType,
+        status: "approved",
+      });
 
-    setBannerNotice(
-      `Đã chuyển nhân viên "${draggedItem.staffName}" sang ${targetShiftName} (${targetDay}) thành công!`
-    );
+      setShiftRegistrations((prev) =>
+        prev.map((item) =>
+          item.id === draggedItem.id
+            ? {
+                ...item,
+                dateKey: targetDateKey,
+                shiftType: targetShiftType,
+                status: "approved",
+              }
+            : item
+        )
+      );
+
+      setBannerNotice(
+        `Đã chuyển nhân viên "${draggedItem.staffName}" sang ${targetShiftName} (${targetDay}) trong CSDL!`
+      );
+    } catch (err) {
+      alert("Lỗi khi chuyển ca: " + (err.response?.data?.message || err.message));
+    }
     setDraggedItem(null);
   };
 
@@ -390,78 +360,99 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
     setNewTargetDate(item.dateKey);
   };
 
-  const handleSaveReassign = (e) => {
+  const handleSaveReassign = async (e) => {
     e.preventDefault();
     if (!reassignModalItem) return;
 
     const targetShiftName =
       SHIFT_TYPES.find((s) => s.id === newTargetShift)?.name || newTargetShift;
 
-    setShiftRegistrations((prev) =>
-      prev.map((item) =>
-        item.id === reassignModalItem.id
-          ? {
-              ...item,
-              dateKey: newTargetDate,
-              shiftType: newTargetShift,
-              status: "approved",
-            }
-          : item
-      )
-    );
+    try {
+      await axios.put(`${API_BASE}/shifts/registrations/${reassignModalItem.id}/reassign`, {
+        targetDateKey: newTargetDate,
+        targetShiftType: newTargetShift,
+        status: "approved",
+      });
 
-    setBannerNotice(
-      `Đã chuyển ca cho "${reassignModalItem.staffName}" sang ${targetShiftName} thành công!`
-    );
-    setReassignModalItem(null);
+      setShiftRegistrations((prev) =>
+        prev.map((item) =>
+          item.id === reassignModalItem.id
+            ? {
+                ...item,
+                dateKey: newTargetDate,
+                shiftType: newTargetShift,
+                status: "approved",
+              }
+            : item
+        )
+      );
+
+      setBannerNotice(
+        `Đã chuyển ca cho "${reassignModalItem.staffName}" sang ${targetShiftName} trong CSDL!`
+      );
+      setReassignModalItem(null);
+    } catch (err) {
+      alert("Lỗi khi chuyển ca: " + (err.response?.data?.message || err.message));
+    }
   };
 
   // ========================================================
-  // XẾP THÊM NHÂN VIÊN VÀO CA (ASSIGN STAFF)
+  // XẾP THÊM NHÂN VIÊN VÀO CA (ASSIGN STAFF) LƯU VÀO CSDL
   // ========================================================
   const handleOpenAssignModal = (dateKey = "", shiftType = "morning") => {
     const defaultDate = dateKey || weekDays[0].dateKey;
+    const defaultStaff = availableStaff[0] || { id: "NV001", name: "Nhân viên", role: "Thu ngân" };
     setAssignForm({
-      staffId: availableStaff[0].id,
-      staffName: availableStaff[0].name,
-      role: availableStaff[0].role,
+      staffId: defaultStaff.id,
+      staffName: defaultStaff.name,
+      role: defaultStaff.role,
       date: defaultDate,
       shiftType: shiftType,
     });
     setShowAssignModal(true);
   };
 
-  const handleSaveAssign = (e) => {
+  const handleSaveAssign = async (e) => {
     e.preventDefault();
-    const newReg = {
-      id: `REG-${Date.now()}`,
-      staffId: assignForm.staffId,
-      staffName: assignForm.staffName,
-      role: assignForm.role,
-      dateKey: assignForm.date,
-      shiftType: assignForm.shiftType,
-      status: "approved",
-      registeredAt: new Date().toLocaleDateString("vi-VN"),
-    };
+    try {
+      const res = await axios.post(`${API_BASE}/shifts/registrations`, {
+        staffId: assignForm.staffId,
+        staffName: assignForm.staffName,
+        role: assignForm.role,
+        dateKey: assignForm.date,
+        shiftType: assignForm.shiftType,
+        status: "approved",
+      });
 
-    setShiftRegistrations([newReg, ...shiftRegistrations]);
-    setBannerNotice(`Đã xếp nhân viên "${assignForm.staffName}" vào ca thành công!`);
-    setShowAssignModal(false);
+      if (res.data?.success) {
+        setBannerNotice(`Đã xếp nhân viên "${assignForm.staffName}" vào ca thành công trong CSDL!`);
+        setShowAssignModal(false);
+        fetchShiftRegistrations();
+      }
+    } catch (err) {
+      alert("Lỗi khi xếp ca nhân viên: " + (err.response?.data?.message || err.message));
+    }
   };
 
-  // Đặt lại dữ liệu mẫu
-  const handleResetData = () => {
-    if (window.confirm("Đặt lại dữ liệu ca đăng ký về mặc định?")) {
-      const init = generateInitialShifts();
-      setShiftRegistrations(init);
-      localStorage.setItem("app_mock_shift_registrations", JSON.stringify(init));
-      setBannerNotice("Đã đặt lại dữ liệu đăng ký ca thành công.");
+  // Đặt lại dữ liệu mẫu trong CSDL MySQL
+  const handleResetData = async () => {
+    if (window.confirm("Đặt lại dữ liệu ca đăng ký về mặc định trong CSDL MySQL?")) {
+      try {
+        const res = await axios.post(`${API_BASE}/shifts/registrations/reset-sample`);
+        if (res.data?.success) {
+          setShiftRegistrations(res.data.data || []);
+          setBannerNotice("Đã đặt lại dữ liệu đăng ký ca trong CSDL thành công.");
+        }
+      } catch (err) {
+        alert("Lỗi khi đặt lại dữ liệu: " + (err.response?.data?.message || err.message));
+      }
     }
   };
 
   // ========================================================
-  // TÍNH TOÁN THỐNG KÊ TUẦN (KPIs)
+  // TÍNH TOÁN THỐNG KÊ TUẦN (KPIs) & TOÀN HỆ THỐNG
   // ========================================================
+  const allPendingShifts = shiftRegistrations.filter((s) => s.status === "pending");
   const currentWeekDateKeys = weekDays.map((w) => w.dateKey);
   const currentWeekShifts = shiftRegistrations.filter((s) =>
     currentWeekDateKeys.includes(s.dateKey)
@@ -471,6 +462,7 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
   const approvedCount = currentWeekShifts.filter((s) => s.status === "approved").length;
   const pendingCount = currentWeekShifts.filter((s) => s.status === "pending").length;
   const rejectedCount = currentWeekShifts.filter((s) => s.status === "rejected").length;
+  const pendingOtherWeeks = allPendingShifts.length - pendingCount;
 
   // Tính số lượng ca bị thiếu người
   let understaffedSlotsCount = 0;
@@ -509,6 +501,72 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
         </div>
       )}
 
+      {/* CẢNH BÁO TỔNG QUAN: CÓ CA CHỜ DUYỆT (ĐẶC BIỆT LÀ CỦA PART-TIME Ở TUẦN SAU) */}
+      {allPendingShifts.length > 0 && (
+        <div
+          style={{
+            background: "#fffbeb",
+            border: "1px solid #fde68a",
+            borderRadius: 10,
+            padding: "12px 18px",
+            marginBottom: 16,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <AlertTriangle size={22} color="#d97706" style={{ flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#92400e" }}>
+                Có {allPendingShifts.length} lượt đăng ký ca làm việc đang chờ Quản lý duyệt!
+              </div>
+              <div style={{ fontSize: "0.82rem", color: "#b45309", marginTop: 2 }}>
+                {pendingCount > 0 ? `Tuần này có ${pendingCount} ca.` : "Tuần hiện tại (đang xem) không có ca chờ."}
+                {pendingOtherWeeks > 0 &&
+                  ` Có ${pendingOtherWeeks} ca của sinh viên Part-time đã đăng ký ở Tuần sau.`}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {pendingOtherWeeks > 0 && (
+              <button
+                type="button"
+                className="sw-btn"
+                style={{
+                  background: "#d97706",
+                  color: "#ffffff",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  padding: "7px 14px",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                }}
+                onClick={handleNextWeek}
+              >
+                👉 Chuyển sang Tuần sau xem {pendingOtherWeeks} ca
+              </button>
+            )}
+            <button
+              type="button"
+              className="sw-btn sw-btn-light"
+              style={{ fontSize: "0.82rem", padding: "7px 12px", background: "#ffffff" }}
+              onClick={() => {
+                setViewMode("table");
+                setTableFilterStatus("pending");
+                setTableFilterWeek("all");
+              }}
+            >
+              📋 Danh sách toàn bộ ca chờ duyệt
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Gợi ý kéo thả */}
       <div className="drag-tip-box">
         <Sparkles size={18} />
@@ -534,7 +592,42 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
             <h4>Đang chờ duyệt</h4>
             <div className="stat-number" style={{ color: "#d97706" }}>
               {pendingCount}
+              {pendingOtherWeeks > 0 && (
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    color: "#b45309",
+                    marginLeft: 6,
+                    background: "#fef3c7",
+                    padding: "2px 6px",
+                    borderRadius: 4,
+                  }}
+                  title={`Có ${pendingOtherWeeks} ca chờ duyệt ở tuần sau`}
+                >
+                  +{pendingOtherWeeks} ca tuần sau
+                </span>
+              )}
             </div>
+            {pendingCount === 0 && pendingOtherWeeks > 0 && (
+              <button
+                type="button"
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#4f46e5",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  padding: 0,
+                  marginTop: 4,
+                  textAlign: "left",
+                }}
+                onClick={handleNextWeek}
+              >
+                👉 Chuyển sang tuần sau duyệt ca
+              </button>
+            )}
           </div>
           <div className="shifts-stat-icon amber">
             <Clock size={22} />
@@ -618,10 +711,17 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
           <button
             className="btn-approve-all"
             onClick={handleApproveAll}
-            disabled={pendingCount === 0}
-            title="Duyệt nhanh tất cả ca đang chờ"
+            disabled={pendingCount === 0 && allPendingShifts.length === 0}
+            title={
+              pendingCount > 0
+                ? `Duyệt nhanh ${pendingCount} ca trong tuần đang xem`
+                : allPendingShifts.length > 0
+                ? `Duyệt toàn bộ ${allPendingShifts.length} ca chờ duyệt trên hệ thống`
+                : "Không có ca nào chờ duyệt"
+            }
           >
-            <Check size={16} /> Duyệt tất cả ({pendingCount})
+            <Check size={16} /> Duyệt tất cả (
+            {pendingCount > 0 ? pendingCount : allPendingShifts.length})
           </button>
 
           {/* Thêm xếp ca mới */}
@@ -630,6 +730,25 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
             onClick={() => handleOpenAssignModal()}
           >
             <Plus size={16} /> Xếp ca trực tiếp
+          </button>
+
+          {/* Cấu hình 3 ca Part-time */}
+          <button
+            className="btn-secondary-action"
+            style={{
+              padding: "8px 14px",
+              background: "#eff6ff",
+              color: "#1d4ed8",
+              borderColor: "#bfdbfe",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+            onClick={() => setShowConfigModal(true)}
+            title="Cấu hình khung giờ 3 ca lẻ cho sinh viên Part-time (Ca 1, Ca 2, Ca 3)"
+          >
+            <Clock size={15} /> 3 Ca Part-time
           </button>
 
           {/* Reset dữ liệu */}
@@ -858,6 +977,17 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
 
             <select
               className="filter-select"
+              value={tableFilterWeek}
+              onChange={(e) => setTableFilterWeek(e.target.value)}
+              style={{ fontWeight: 600, color: "#1e293b", borderColor: "#cbd5e1" }}
+            >
+              <option value="all">🌐 Toàn bộ ca trên hệ thống ({shiftRegistrations.length} ca)</option>
+              <option value="pending_only">⏳ Chỉ các ca đang chờ duyệt ({allPendingShifts.length} ca)</option>
+              <option value="current">📅 Tuần hiện tại ({weekStartStr} — {weekEndStr})</option>
+            </select>
+
+            <select
+              className="filter-select"
               value={tableFilterStatus}
               onChange={(e) => setTableFilterStatus(e.target.value)}
             >
@@ -892,21 +1022,40 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
               </tr>
             </thead>
             <tbody>
-              {currentWeekShifts
-                .filter((item) => {
+              {(() => {
+                const baseShifts =
+                  tableFilterWeek === "current"
+                    ? currentWeekShifts
+                    : tableFilterWeek === "pending_only"
+                    ? allPendingShifts
+                    : shiftRegistrations;
+
+                const filteredRows = baseShifts.filter((item) => {
                   const matchStatus =
-                    tableFilterStatus === "all" ||
-                    item.status === tableFilterStatus;
+                    tableFilterStatus === "all" || item.status === tableFilterStatus;
                   const matchShift =
-                    tableFilterShift === "all" ||
-                    item.shiftType === tableFilterShift;
+                    tableFilterShift === "all" || item.shiftType === tableFilterShift;
                   return matchStatus && matchShift;
-                })
-                .map((item) => {
-                  const shiftObj = SHIFT_TYPES.find(
-                    (s) => s.id === item.shiftType
+                });
+
+                if (filteredRows.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: "center", padding: "36px 16px", color: "#64748b" }}>
+                        Không có ca làm việc nào phù hợp với bộ lọc hiện tại.
+                      </td>
+                    </tr>
                   );
+                }
+
+                const dayNamesMap = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+
+                return filteredRows.map((item) => {
+                  const shiftObj = SHIFT_TYPES.find((s) => s.id === item.shiftType);
                   const dayObj = weekDays.find((w) => w.dateKey === item.dateKey);
+                  const dayName =
+                    dayObj?.dayLabel ||
+                    (item.dateKey ? dayNamesMap[new Date(item.dateKey).getDay()] : "Ngày làm");
 
                   return (
                     <tr key={item.id}>
@@ -916,27 +1065,32 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
                         </strong>
                       </td>
                       <td>
-                        <strong>{dayObj?.dayLabel}</strong> (
-                        {formatDateVN(item.dateKey)})
+                        <strong>{dayName}</strong> ({formatDateVN(item.dateKey)})
                       </td>
                       <td>
                         <span
-                          className={`shift-title-wrapper ${shiftObj?.colorClass}`}
+                          className={`shift-title-wrapper ${shiftObj?.colorClass || "morning"}`}
                           style={{ fontSize: 13 }}
                         >
-                          {shiftObj?.icon} {shiftObj?.name} ({shiftObj?.time})
+                          {shiftObj?.icon} {item.tenCaLam || shiftObj?.name} (
+                          {item.gioBatDau
+                            ? `${String(item.gioBatDau).slice(0, 5)} - ${String(item.gioKetThuc).slice(0, 5)}`
+                            : shiftObj?.time})
                         </span>
                       </td>
                       <td>
                         <div className="emp-name-cell">
-                          <div className="emp-avatar" style={{ width: 28, height: 28, fontSize: 12 }}>
-                            {item.staffName.charAt(0).toUpperCase()}
+                          <div
+                            className="emp-avatar"
+                            style={{ width: 28, height: 28, fontSize: 12 }}
+                          >
+                            {(item.staffName || "NV").charAt(0).toUpperCase()}
                           </div>
-                          <span className="emp-name">{item.staffName}</span>
+                          <span className="emp-name">{item.staffName || "Nhân viên"}</span>
                         </div>
                       </td>
                       <td>
-                        <span className="shift-role-tag">{item.role}</span>
+                        <span className="shift-role-tag">{item.role || "Nhân viên"}</span>
                       </td>
                       <td>
                         <span className={`shift-status-tag ${item.status}`}>
@@ -996,7 +1150,8 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
                       </td>
                     </tr>
                   );
-                })}
+                });
+              })()}
             </tbody>
           </table>
         </div>
@@ -1188,6 +1343,10 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
             </form>
           </div>
         </div>
+      )}
+
+      {showConfigModal && (
+        <PartTimeShiftConfig isModal={true} onClose={() => setShowConfigModal(false)} />
       )}
     </div>
   );

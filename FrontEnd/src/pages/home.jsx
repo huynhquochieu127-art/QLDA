@@ -22,6 +22,7 @@ import Payslip from "../components/Payslip";
 import RevenueReport from "../components/RevenueReport";
 import WorkingStaffPanel from "../components/WorkingStaffPanel";
 import PayrollManagement from "../components/PayrollManagement";
+import PartTimeShiftConfig from "../components/PartTimeShiftConfig";
 import {
   Clock,
   User,
@@ -223,7 +224,7 @@ export default function Home() {
       id: "settings",
       label: "Cấu hình hệ thống",
       icon: <Settings size={18} />,
-      roles: ["admin"],
+      roles: ["admin", "manager"],
     },
     {
       id: "ai",
@@ -376,16 +377,7 @@ export default function Home() {
             <ShiftApprovalManagement currentRole={currentRole} />
           )}
 
-          {/* PLACEHOLDER DÀNH CHO CÁC TAB CHƯA CÓ TRANG */}
-          {["settings"].includes(activeTab) && (
-            <div className="tab-placeholder">
-              <Coffee size={28} className="placeholder-icon" />
-              <h2>
-                Phân hệ: {menuList.find((m) => m.id === activeTab)?.label}
-              </h2>
-              <p>Sẵn sàng kết nối MySQL cho phân hệ này.</p>
-            </div>
-          )}
+          {activeTab === "settings" && <PartTimeShiftConfig />}
         </div>
       </main>
     </div>

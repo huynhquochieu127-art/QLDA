@@ -41,6 +41,9 @@ app.use("/api", timesheetRoutes);
 const payrollRoutes = require("./routes/payrollRoutes");
 app.use("/api", payrollRoutes);
 
+const shiftRoutes = require("./routes/shiftRoutes");
+app.use("/api", shiftRoutes);
+
 // Lấy Secret Key từ .env hoặc fallback
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_key";
 
@@ -95,7 +98,7 @@ app.post("/api/login", async (req, res) => {
 
     // 2. Tra cứu tài khoản trong cơ sở dữ liệu MySQL (bảng taikhoan + vaitro + nhanvien)
     const [users] = await db.query(
-      `SELECT tk.*, vt.TenVaiTro, nv.MaNhanVien, nv.MaNhanVienCode, nv.ChucVu
+      `SELECT tk.*, vt.TenVaiTro, nv.MaNhanVien, nv.MaNhanVienCode, nv.ChucVu, nv.LoaiNhanVien
        FROM taikhoan tk
        LEFT JOIN vaitro vt ON tk.MaVaiTro = vt.MaVaiTro
        LEFT JOIN nhanvien nv ON tk.MaTaiKhoan = nv.MaTaiKhoan
@@ -143,6 +146,7 @@ app.post("/api/login", async (req, res) => {
       role: userRecord.TenVaiTro || "Nhân viên",
       maVaiTro: userRecord.MaVaiTro,
       chucVu: userRecord.ChucVu,
+      loaiNhanVien: userRecord.LoaiNhanVien || "Part-time",
     };
 
     const accessToken = jwt.sign(userPayload, JWT_SECRET, {
