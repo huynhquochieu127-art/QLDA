@@ -21,6 +21,7 @@ import MyTimesheet from "../components/MyTimesheet";
 import Payslip from "../components/Payslip";
 import RevenueReport from "../components/RevenueReport";
 import WorkingStaffPanel from "../components/WorkingStaffPanel";
+import PayrollManagement from "../components/PayrollManagement";
 import {
   Clock,
   User,
@@ -43,6 +44,7 @@ import {
   ClipboardCheck,
   Receipt,
   LogIn,
+  Wallet,
 } from "lucide-react";
 
 export default function Home() {
@@ -206,6 +208,12 @@ export default function Home() {
       roles: ["admin", "manager"],
     },
     {
+      id: "payroll",
+      label: "Bảng lương & Quyết toán",
+      icon: <Wallet size={18} />,
+      roles: ["admin", "manager"],
+    },
+    {
       id: "hr",
       label: "Quản lý nhân sự & Phân quyền",
       icon: <Users size={18} />,
@@ -361,6 +369,8 @@ export default function Home() {
           {activeTab === "hr" && (
             <EmployeeManagement currentRole={currentRole} />
           )}
+
+          {activeTab === "payroll" && <PayrollManagement />}
 
           {activeTab === "shifts_approval" && (
             <ShiftApprovalManagement currentRole={currentRole} />

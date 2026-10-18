@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from "react";
+import MonthlyTimesheetManager from "./MonthlyTimesheetManager";
+import { CheckSquare, Calendar, Clock } from "lucide-react";
 
 // Đổi URL này theo cổng chạy Backend của bạn (VD: http://localhost:5000/api hoặc http://localhost:3000/api)
 const API_BASE_URL = "http://localhost:5000/api";
 
 const TimekeepingManagement = () => {
+  const [activeModule, setActiveModule] = useState("monthly_timesheet"); // Mặc định mở Bảng công tháng QH-55
   const [requests, setRequests] = useState([]);
   const [filterStatus, setFilterStatus] = useState("pending");
   const [loading, setLoading] = useState(false);
@@ -151,26 +154,81 @@ const TimekeepingManagement = () => {
 
   return (
     <div style={{ padding: "24px", fontFamily: "Inter, sans-serif" }}>
-      {/* Header & Bộ lọc */}
+      {/* THANH ĐIỀU HƯỚNG MODULE CHÍNH */}
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "20px",
-          flexWrap: "wrap",
           gap: "12px",
+          borderBottom: "2px solid #e2e8f0",
+          marginBottom: "24px",
+          paddingBottom: "4px",
         }}
       >
-        <div>
-          <h2 style={{ margin: 0, color: "#0f172a", fontSize: "22px" }}>
-            Duyệt Yêu Cầu Bổ Sung Điểm Danh
-          </h2>
-          <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: "14px" }}>
-            Khi bấm "Đồng ý", hệ thống tự động tạo bản ghi Check-in/Check-out
-            hợp lệ vào bảng chấm công cho nhân viên.
-          </p>
-        </div>
+        <button
+          onClick={() => setActiveModule("monthly_timesheet")}
+          style={{
+            padding: "10px 20px",
+            border: "none",
+            borderBottom: activeModule === "monthly_timesheet" ? "3px solid #4f46e5" : "3px solid transparent",
+            backgroundColor: "transparent",
+            color: activeModule === "monthly_timesheet" ? "#4f46e5" : "#64748b",
+            fontWeight: "700",
+            fontSize: "15px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <Calendar size={18} />
+          Bảng Công Tháng & Chốt Sổ Gửi Admin (QH-55)
+        </button>
+
+        <button
+          onClick={() => setActiveModule("supplement")}
+          style={{
+            padding: "10px 20px",
+            border: "none",
+            borderBottom: activeModule === "supplement" ? "3px solid #2563eb" : "3px solid transparent",
+            backgroundColor: "transparent",
+            color: activeModule === "supplement" ? "#2563eb" : "#64748b",
+            fontWeight: "700",
+            fontSize: "15px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <CheckSquare size={18} />
+          Duyệt Yêu Cầu Bổ Sung Điểm Danh (QH-49)
+        </button>
+      </div>
+
+      {activeModule === "monthly_timesheet" ? (
+        <MonthlyTimesheetManager />
+      ) : (
+        <>
+          {/* Header & Bộ lọc bổ sung điểm danh */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "20px",
+              flexWrap: "wrap",
+              gap: "12px",
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0, color: "#0f172a", fontSize: "22px" }}>
+                Duyệt Yêu Cầu Bổ Sung Điểm Danh
+              </h2>
+              <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: "14px" }}>
+                Khi bấm "Đồng ý", hệ thống tự động tạo bản ghi Check-in/Check-out
+                hợp lệ vào bảng chấm công cho nhân viên.
+              </p>
+            </div>
 
         <div style={{ display: "flex", gap: "8px" }}>
           {[
@@ -348,6 +406,8 @@ const TimekeepingManagement = () => {
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
     </div>
   );
