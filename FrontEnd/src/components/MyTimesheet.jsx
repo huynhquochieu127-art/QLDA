@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import axios from "axios";
 import {
   ClipboardCheck,
   CheckCircle2,
@@ -7,6 +8,7 @@ import {
   X,
   Send,
   Lock,
+  ShieldCheck,
 } from "lucide-react";
 import "../../css/staff.css";
 import {
@@ -21,6 +23,7 @@ import {
   readLocal,
   writeLocal,
   STORAGE_KEYS,
+  API_BASE,
 } from "../utils/staffWork";
 
 const ROW_STATUS = {
@@ -91,6 +94,7 @@ export default function MyTimesheet() {
   const [monthDate, setMonthDate] = useState(monthOptions[0]);
   const monthKey = monthKeyOf(monthDate);
 
+  const [dbRecord, setDbRecord] = useState(null);
   const [feedbackMap, setFeedbackMap] = useState(() => readLocal(STORAGE_KEYS.timesheetFeedback, {}));
   const feedbackKey = `${user.staffId}_${monthKey}`;
   const feedback = feedbackMap[feedbackKey];
@@ -99,6 +103,29 @@ export default function MyTimesheet() {
   const [reportText, setReportText] = useState("");
   const [reportError, setReportError] = useState("");
   const [notice, setNotice] = useState("");
+
+  // Tải thông tin bảng công của nhân viên từ MySQL
+  const fetchMyTimesheet = () => {
+    const empId = user.maNhanVien || 3;
+    const t = monthDate.getMonth() + 1;
+    const n = monthDate.getFullYear();
+    axios
+      .get(`${API_BASE}/bangcong-thang/my`, {
+        params: { maNhanVien: empId, thang: t, nam: n },
+      })
+      .then((res) => {
+        if (res.data.success && res.data.data) {
+          setDbRecord(res.data.data);
+        } else {
+          setDbRecord(null);
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchMyTimesheet();
+  }, [user.maNhanVien, monthKey]);
 
   const { rows, isSample } = useMemo(() => {
     const mine = readLocal(STORAGE_KEYS.checkins).filter(
@@ -113,9 +140,9 @@ export default function MyTimesheet() {
     };
   }, [monthKey]);
 
-  const totalDays = new Set(rows.filter((r) => r.status !== "missing_out").map((r) => r.dateKey)).size;
-  const totalHours = rows.reduce((sum, r) => sum + r.hours, 0);
-  const lateCount = rows.filter((r) => r.lateMinutes > 0).length;
+  const totalDays = dbRecord?.SoCong ? Number(dbRecord.SoCong) : new Set(rows.filter((r) => r.status !== "missing_out").map((r) => r.dateKey)).size;
+  const totalHours = dbRecord?.SoGioLam ? Number(dbRecord.SoGioLam) : rows.reduce((sum, r) => sum + r.hours, 0);
+  const lateCount = dbRecord?.SoNgayTre !== undefined ? Number(dbRecord.SoNgayTre) : rows.filter((r) => r.lateMinutes > 0).length;
   const missingCount = rows.filter((r) => r.status === "missing_out").length;
 
   const saveFeedback = (value) => {
@@ -124,30 +151,62 @@ export default function MyTimesheet() {
     writeLocal(STORAGE_KEYS.timesheetFeedback, next);
   };
 
-  const handleConfirm = () => {
+  // NHÂN VIÊN BẤM XÁC NHẬN ĐÚNG
+  const handleConfirm = async () => {
     if (!window.confirm(`Xác nhận bảng công tháng ${monthKey.split("-").reverse().join("/")} là chính xác? Sau khi chốt sẽ không thể báo sai sót.`)) return;
+
+    try {
+      const empId = user.maNhanVien || 3;
+      const t = monthDate.getMonth() + 1;
+      const n = monthDate.getFullYear();
+      await axios.post(`${API_BASE}/bangcong-thang/my/confirm`, {
+        maNhanVien: empId,
+        thang: t,
+        nam: n,
+      });
+      fetchMyTimesheet();
+    } catch (_) {}
+
     saveFeedback({ status: "confirmed", at: new Date().toISOString() });
-    setNotice("Đã xác nhận bảng công. Trạng thái: Đã chốt.");
+    setNotice("Đã xác nhận bảng công. Trạng thái: Xác nhận đúng.");
   };
 
   const openReport = (prefill = "") => {
-    setReportText(prefill || feedback?.reason || "");
+    setReportText(prefill || dbRecord?.PhanHoiNV || feedback?.reason || "");
     setReportError("");
     setShowReport(true);
   };
 
-  const handleSendReport = (e) => {
+  // NHÂN VIÊN GỬI KHIẾU NẠI / BÁO SAI SÓT (QH-54)
+  const handleSendReport = async (e) => {
     e.preventDefault();
     if (reportText.trim().length < 10) {
       setReportError("Vui lòng mô tả sai sót cụ thể (tối thiểu 10 ký tự).");
       return;
     }
+
+    try {
+      const empId = user.maNhanVien || 3;
+      const t = monthDate.getMonth() + 1;
+      const n = monthDate.getFullYear();
+      await axios.post(`${API_BASE}/bangcong-thang/my/dispute`, {
+        maNhanVien: empId,
+        thang: t,
+        nam: n,
+        lyDo: reportText.trim(),
+      });
+      fetchMyTimesheet();
+    } catch (_) {}
+
     saveFeedback({ status: "disputed", reason: reportText.trim(), at: new Date().toISOString() });
     setShowReport(false);
-    setNotice("Đã gửi báo cáo sai sót. Trạng thái: Đang khiếu nại, Quản lý sẽ kiểm tra lại.");
+    setNotice("Đã gửi báo cáo sai sót. Trạng thái: Đang khiếu nại, Quản lý sẽ kiểm tra camera/sổ sách.");
   };
 
-  const isLocked = feedback?.status === "confirmed";
+  const isSubmittedToAdmin = dbRecord?.TrangThai === "submitted_to_admin" || dbRecord?.isLocked;
+  const isConfirmed = dbRecord?.TrangThai === "confirmed" || feedback?.status === "confirmed";
+  const isDisputed = dbRecord?.TrangThai === "emp_replied" || feedback?.status === "disputed";
+  const isLocked = isSubmittedToAdmin || isConfirmed;
 
   return (
     <div className="sw-page">
@@ -185,20 +244,29 @@ export default function MyTimesheet() {
       )}
 
       {/* TRẠNG THÁI BẢNG CÔNG */}
-      {feedback?.status === "confirmed" && (
-        <div className="sw-alert sw-alert-success">
-          <Lock size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+      {isSubmittedToAdmin && (
+        <div className="sw-alert sw-alert-success" style={{ backgroundColor: "#ecfdf5", border: "1.5px solid #a7f3d0", color: "#065f46" }}>
+          <ShieldCheck size={18} style={{ flexShrink: 0, marginTop: 2, color: "#059669" }} />
           <span>
-            <strong>Đã chốt</strong> — bạn đã xác nhận bảng công lúc{" "}
-            {new Date(feedback.at).toLocaleString("vi-VN")}.
+            <strong>BẢNG CÔNG ĐÃ ĐƯỢC QUẢN LÝ CHỐT SỔ & GỬI LÊN ADMIN TÍNH LƯƠNG</strong> — Dữ liệu đã bị khóa. Bảng lương đang được phân hệ Tính lương xử lý.
           </span>
         </div>
       )}
-      {feedback?.status === "disputed" && (
+
+      {isConfirmed && !isSubmittedToAdmin && (
+        <div className="sw-alert sw-alert-success">
+          <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+          <span>
+            <strong>Xác nhận đúng</strong> — bạn đã xác nhận bảng công chính xác. Đang chờ Quản lý chốt sổ gửi Admin.
+          </span>
+        </div>
+      )}
+
+      {isDisputed && !isSubmittedToAdmin && (
         <div className="sw-alert sw-alert-warning">
           <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
           <span>
-            <strong>Đang khiếu nại</strong> — nội dung đã gửi: "{feedback.reason}"
+            <strong>Đang khiếu nại sai sót</strong> — nội dung: "{dbRecord?.PhanHoiNV || feedback?.reason}". Quản lý sẽ kiểm tra camera/sổ sách để cập nhật lại.
           </span>
         </div>
       )}
