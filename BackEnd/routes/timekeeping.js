@@ -356,122 +356,350 @@ router.get(["/timekeeping/late-today", "/chamcong/di-tre"], async (req, res) => 
   }
 });
 
-/**
- * [POST] /api/timekeeping/checkin (hoặc /api/chamcong/checkin)
- * Thực hiện Check-in: Tự động so sánh Giờ Check-in thực tế với Giờ bắt đầu ca
- * Nếu lớn hơn: Đưa vào danh sách đi trễ (DiTre = 1) và tính số phút trễ
- */
-router.post(["/timekeeping/checkin", "/chamcong/checkin"], async (req, res) => {
+// =========================================================================
+// Helper: Đồng bộ Schema bảng chamcong (đảm bảo độ dài cột TrangThai & GhiChu)
+// =========================================================================
+let chamCongSchemaEnsured = false;
+async function ensureChamCongSchema() {
+  if (chamCongSchemaEnsured) return;
   try {
-    const { maNhanVien, maCaLam, gioCheckIn } = req.body;
+    await db.query("ALTER TABLE chamcong MODIFY COLUMN TrangThai VARCHAR(50) DEFAULT 'Hợp lệ'");
+    await db.query("ALTER TABLE chamcong MODIFY COLUMN GhiChu TEXT NULL");
+    chamCongSchemaEnsured = true;
+  } catch (err) {
+    // Không ném lỗi nếu cột đã có cấu trúc phù hợp
+  }
+}
+ensureChamCongSchema();
 
-    if (!maNhanVien) {
-      return res.status(400).json({
-        success: false,
-        message: "Mã nhân viên (maNhanVien) là bắt buộc!",
-      });
-    }
+/**
+ * Helper BẮT BUỘC: Lấy thời gian hiện tại của máy chủ (Server Time).
+ * TUYỆT ĐỐI KHÔNG nhận giờ từ thiết bị client nhằm chống gian lận đổi giờ điện thoại/máy tính.
+ */
+function getServerDateTime() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const seconds = String(now.getSeconds()).padStart(2, "0");
 
-    const checkInDate = gioCheckIn ? new Date(gioCheckIn) : new Date();
-    const ngayLam = checkInDate.toISOString().split("T")[0];
+  const serverDate = `${year}-${month}-${day}`;
+  const serverTime = `${hours}:${minutes}:${seconds}`;
+  const serverDateTime = `${serverDate} ${serverTime}`;
 
-    // Tra cứu ca làm việc xếp lịch
-    let shiftId = maCaLam;
-    let shiftInfo = null;
+  return {
+    serverNow: now,
+    serverDate,
+    serverTime,
+    serverDateTime,
+    iso: now.toISOString(),
+  };
+}
 
-    if (shiftId) {
-      const [shifts] = await db.query(
-        "SELECT MaCaLam, TenCaLam, GioBatDau, GioKetThuc FROM calam WHERE MaCaLam = ? LIMIT 1",
-        [shiftId]
-      );
-      if (shifts.length > 0) shiftInfo = shifts[0];
-    }
+/**
+ * Helper: Tìm MaNhanVien (INT) từ staffId, MaNhanVienCode, hoặc ID
+ */
+async function resolveEmployeeId(staffIdentifier) {
+  if (!staffIdentifier) return null;
+  if (typeof staffIdentifier === "number" || /^\d+$/.test(String(staffIdentifier).trim())) {
+    const num = Number(staffIdentifier);
+    const [rows] = await db.query("SELECT MaNhanVien FROM nhanvien WHERE MaNhanVien = ?", [num]);
+    if (rows.length > 0) return rows[0].MaNhanVien;
+  }
+  const code = String(staffIdentifier).trim();
+  const [rows] = await db.query(
+    "SELECT MaNhanVien FROM nhanvien WHERE MaNhanVienCode = ? OR HoTen = ? LIMIT 1",
+    [code, code]
+  );
+  if (rows.length > 0) return rows[0].MaNhanVien;
 
-    // Nếu không truyền maCaLam, tra cứu từ đăng ký ca hoặc ca mặc định
-    if (!shiftInfo) {
-      const [regShifts] = await db.query(
-        `SELECT cl.MaCaLam, cl.TenCaLam, cl.GioBatDau, cl.GioKetThuc
-         FROM dangky_ca dkc
-         JOIN calam cl ON dkc.MaCaLam = cl.MaCaLam
-         WHERE dkc.MaNhanVien = ? AND dkc.NgayLam = ?
-         LIMIT 1`,
-        [maNhanVien, ngayLam]
-      );
-      if (regShifts.length > 0) {
-        shiftInfo = regShifts[0];
-        shiftId = shiftInfo.MaCaLam;
-      } else {
-        const [defaultShifts] = await db.query("SELECT * FROM calam LIMIT 1");
-        if (defaultShifts.length > 0) {
-          shiftInfo = defaultShifts[0];
+  const match = code.match(/\d+/);
+  if (match) {
+    const num = parseInt(match[0], 10);
+    const [numRows] = await db.query("SELECT MaNhanVien FROM nhanvien WHERE MaNhanVien = ?", [num]);
+    if (numRows.length > 0) return numRows[0].MaNhanVien;
+  }
+  return null;
+}
+
+/**
+ * [POST] /api/timekeeping/checkin (hoặc /api/chamcong/checkin, /api/timekeeping/check-in, /api/timekeeping/button/checkin)
+ * Tiếp nhận thao tác bấm nút Check-in từ UI:
+ * BẮT BUỘC: Lấy Server Time của máy chủ backend, TUYỆT ĐỐI BỎ QUA giờ từ thiết bị client!
+ */
+router.post(
+  ["/timekeeping/checkin", "/chamcong/checkin", "/timekeeping/check-in", "/timekeeping/button/checkin"],
+  async (req, res) => {
+    try {
+      await ensureChamCongSchema();
+      const { maNhanVien, staffId, maCaLam, shiftType, ghiChu: clientGhiChu } = req.body;
+
+      // 1. Phân giải mã nhân viên từ body
+      const empId = await resolveEmployeeId(maNhanVien || staffId);
+      if (!empId) {
+        return res.status(400).json({
+          success: false,
+          message: "Mã nhân viên (maNhanVien hoặc staffId) không hợp lệ hoặc không tồn tại trong hệ thống!",
+        });
+      }
+
+      // 2. LẤY GIỜ MÁY CHỦ (SERVER TIME) - KHÔNG LẤY TỪ THIẾT BỊ NHÂN VIÊN
+      const { serverNow, serverDate, serverTime, serverDateTime, iso } = getServerDateTime();
+
+      // 3. Tra cứu ca làm việc xếp lịch
+      let shiftId = maCaLam ? Number(maCaLam) : null;
+      let shiftInfo = null;
+
+      if (shiftId) {
+        const [shifts] = await db.query(
+          "SELECT MaCaLam, TenCaLam, GioBatDau, GioKetThuc FROM calam WHERE MaCaLam = ? LIMIT 1",
+          [shiftId]
+        );
+        if (shifts.length > 0) shiftInfo = shifts[0];
+      }
+
+      // Nếu không truyền maCaLam hoặc truyền shiftType dạng chữ (morning, Ca 1...)
+      if (!shiftInfo && shiftType) {
+        const shiftStr = String(shiftType).toLowerCase().trim();
+        let shiftName = "Ca 1";
+        if (shiftStr.includes("ca 1") || shiftStr.includes("morning")) shiftName = "Ca 1";
+        else if (shiftStr.includes("ca 2") || shiftStr.includes("afternoon")) shiftName = "Ca 2";
+        else if (shiftStr.includes("ca 3") || shiftStr.includes("evening")) shiftName = "Ca 3";
+        else if (shiftStr.includes("ca a") || shiftStr.includes("ca_a")) shiftName = "Ca A";
+        else if (shiftStr.includes("ca b") || shiftStr.includes("ca_b")) shiftName = "Ca B";
+
+        const [namedShifts] = await db.query(
+          "SELECT MaCaLam, TenCaLam, GioBatDau, GioKetThuc FROM calam WHERE TenCaLam = ? LIMIT 1",
+          [shiftName]
+        );
+        if (namedShifts.length > 0) {
+          shiftInfo = namedShifts[0];
           shiftId = shiftInfo.MaCaLam;
         }
       }
+
+      // Nếu vẫn chưa có, tra cứu từ đăng ký ca được duyệt trong ngày của nhân viên
+      if (!shiftInfo) {
+        const [regShifts] = await db.query(
+          `SELECT cl.MaCaLam, cl.TenCaLam, cl.GioBatDau, cl.GioKetThuc
+           FROM dangky_ca dkc
+           JOIN calam cl ON dkc.MaCaLam = cl.MaCaLam
+           WHERE dkc.MaNhanVien = ? AND dkc.NgayLam = ?
+           ORDER BY dkc.MaDangKy DESC
+           LIMIT 1`,
+          [empId, serverDate]
+        );
+        if (regShifts.length > 0) {
+          shiftInfo = regShifts[0];
+          shiftId = shiftInfo.MaCaLam;
+        } else {
+          // Ca mặc định nếu nhân viên chưa đăng ký ca nào
+          const [defaultShifts] = await db.query("SELECT * FROM calam ORDER BY MaCaLam ASC LIMIT 1");
+          if (defaultShifts.length > 0) {
+            shiftInfo = defaultShifts[0];
+            shiftId = shiftInfo.MaCaLam;
+          }
+        }
+      }
+
+      // 4. SO SÁNH SERVER TIME VỚI GIỜ BẮT ĐẦU CA XẾP LỊCH
+      const shiftStart = shiftInfo ? shiftInfo.GioBatDau : "08:00:00";
+      const comp = compareCheckInTime(serverNow, shiftStart);
+      const diTre = comp.isLate ? 1 : 0;
+      const trangThai = comp.isLate ? "Đi trễ" : "Hợp lệ";
+      const serverNote = comp.isLate
+        ? `Đi trễ ${comp.lateMinutes} phút (Ca ${comp.gioBatDau} - Máy chủ ghi nhận: ${serverTime})`
+        : `Check-in đúng giờ lúc ${serverTime} (Giờ máy chủ)`;
+      const ghiChu = clientGhiChu ? `${clientGhiChu} | ${serverNote}` : serverNote;
+
+      // 5. Kiểm tra bản ghi chấm công trong ngày của nhân viên
+      const [existing] = await db.query(
+        "SELECT MaChamCong FROM chamcong WHERE MaNhanVien = ? AND NgayLam = ? AND (MaCaLam = ? OR MaCaLam IS NULL) LIMIT 1",
+        [empId, serverDate, shiftId]
+      );
+
+      let chamCongId;
+      if (existing.length > 0) {
+        chamCongId = existing[0].MaChamCong;
+        await db.query(
+          `UPDATE chamcong 
+           SET GioCheckIn = ?, MaCaLam = ?, DiTre = ?, GhiChu = ?, TrangThai = ?
+           WHERE MaChamCong = ?`,
+          [serverDateTime, shiftId, diTre, ghiChu, trangThai, chamCongId]
+        );
+      } else {
+        const [insertRes] = await db.query(
+          `INSERT INTO chamcong (MaNhanVien, MaCaLam, NgayLam, GioCheckIn, DiTre, VeSom, TrangThai, GhiChu)
+           VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
+          [empId, shiftId, serverDate, serverDateTime, diTre, trangThai, ghiChu]
+        );
+        chamCongId = insertRes.insertId;
+      }
+
+      // 6. Tra cứu thông tin nhân viên
+      const [empRows] = await db.query(
+        "SELECT HoTen, MaNhanVienCode, ChucVu FROM nhanvien WHERE MaNhanVien = ?",
+        [empId]
+      );
+      const emp = empRows[0] || {};
+
+      return res.status(201).json({
+        success: true,
+        action: "checkin",
+        message: comp.isLate
+          ? `CẢNH BÁO: Nhân viên ${emp.HoTen || ""} đi trễ ${comp.lateMinutes} phút! (Ca ${comp.gioBatDau} - Giờ máy chủ: ${serverTime})`
+          : `Check-in thành công cho ${emp.HoTen || ""} đúng giờ lúc ${serverTime} (Giờ máy chủ)!`,
+        timeSource: "SERVER_TIME",
+        serverTime: serverDateTime,
+        serverTimeString: serverTime,
+        serverDate,
+        isLate: comp.isLate,
+        lateMinutes: comp.lateMinutes,
+        data: {
+          maChamCong: chamCongId,
+          maNhanVien: empId,
+          hoTen: emp.HoTen,
+          maNhanVienCode: emp.MaNhanVienCode,
+          chucVu: emp.ChucVu,
+          caLam: shiftInfo ? shiftInfo.TenCaLam : "Ca chuẩn",
+          gioBatDau: comp.gioBatDau,
+          gioCheckIn: serverTime,
+          ngayLam: serverDate,
+          diTre,
+          soPhutDiTre: comp.lateMinutes,
+          trangThai,
+          ghiChu,
+        },
+      });
+    } catch (error) {
+      console.error("Lỗi Check-in Server Time:", error);
+      res.status(500).json({ success: false, message: error.message });
     }
+  }
+);
 
-    // SO SÁNH GIỜ CHECK-IN THỰC TẾ VỚI GIỜ BẮT ĐẦU CA
-    const shiftStart = shiftInfo ? shiftInfo.GioBatDau : "08:00:00";
-    const comp = compareCheckInTime(checkInDate, shiftStart);
-    const diTre = comp.isLate ? 1 : 0;
-    const ghiChu = comp.isLate
-      ? `Đi trễ ${comp.lateMinutes} phút (Ca ${comp.gioBatDau} vào lúc ${comp.gioCheckIn})`
-      : "Check-in đúng giờ";
+/**
+ * [POST] /api/timekeeping/checkout (hoặc /api/chamcong/checkout, /api/timekeeping/check-out, /api/timekeeping/button/checkout)
+ * Tiếp nhận thao tác bấm nút Check-out từ UI:
+ * BẮT BUỘC: Lấy Server Time của máy chủ backend, tự động tính số giờ làm việc thực tế
+ */
+router.post(
+  ["/timekeeping/checkout", "/chamcong/checkout", "/timekeeping/check-out", "/timekeeping/button/checkout"],
+  async (req, res) => {
+    try {
+      await ensureChamCongSchema();
+      const { maNhanVien, staffId, maCaLam, ghiChu: clientGhiChu } = req.body;
 
-    // Kiểm tra bản ghi chấm công trong ngày
-    const [existing] = await db.query(
-      "SELECT MaChamCong FROM chamcong WHERE MaNhanVien = ? AND NgayLam = ? AND (MaCaLam = ? OR MaCaLam IS NULL) LIMIT 1",
-      [maNhanVien, ngayLam, shiftId]
-    );
+      const empId = await resolveEmployeeId(maNhanVien || staffId);
+      if (!empId) {
+        return res.status(400).json({
+          success: false,
+          message: "Mã nhân viên (maNhanVien hoặc staffId) không hợp lệ!",
+        });
+      }
 
-    let chamCongId;
-    if (existing.length > 0) {
-      chamCongId = existing[0].MaChamCong;
+      // LẤY GIỜ MÁY CHỦ HIỆN TẠI (SERVER TIME)
+      const { serverNow, serverDate, serverTime, serverDateTime } = getServerDateTime();
+
+      // Tìm bản ghi chấm công của nhân viên hôm nay hoặc bản ghi đang mở chưa checkout
+      const [openRows] = await db.query(
+        `SELECT cc.MaChamCong, cc.MaCaLam, cc.NgayLam, cc.GioCheckIn, cl.TenCaLam, cl.GioBatDau, cl.GioKetThuc
+         FROM chamcong cc
+         LEFT JOIN calam cl ON cc.MaCaLam = cl.MaCaLam
+         WHERE cc.MaNhanVien = ? AND (cc.GioCheckOut IS NULL OR cc.NgayLam = ?)
+         ORDER BY cc.MaChamCong DESC
+         LIMIT 1`,
+        [empId, serverDate]
+      );
+
+      if (openRows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Không tìm thấy lượt Check-in nào chưa Check-out của bạn hôm nay!",
+        });
+      }
+
+      const currentRecord = openRows[0];
+      const chamCongId = currentRecord.MaChamCong;
+
+      // Tính số giờ làm thực tế từ GioCheckIn đến Server Time Check-out
+      let soGioLam = 0;
+      if (currentRecord.GioCheckIn) {
+        const checkInDate = new Date(currentRecord.GioCheckIn);
+        const diffMs = serverNow.getTime() - checkInDate.getTime();
+        soGioLam = Math.max(0, Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10);
+      }
+
+      // Kiểm tra về sớm nếu có giờ kết thúc ca
+      let veSom = 0;
+      if (currentRecord.GioKetThuc) {
+        const [endH, endM] = currentRecord.GioKetThuc.split(":").map(Number);
+        const shiftEndTotalMinutes = endH * 60 + (endM || 0);
+        const serverMinutes = serverNow.getHours() * 60 + serverNow.getMinutes();
+        if (serverMinutes < shiftEndTotalMinutes) {
+          veSom = 1;
+        }
+      }
+
+      const checkoutNote = `Check-out lúc ${serverTime} (Giờ máy chủ) · Thực làm: ${soGioLam} giờ`;
+      const finalGhiChu = clientGhiChu ? `${clientGhiChu} | ${checkoutNote}` : checkoutNote;
+
       await db.query(
         `UPDATE chamcong 
-         SET GioCheckIn = ?, MaCaLam = ?, DiTre = ?, GhiChu = ?, TrangThai = ?
+         SET GioCheckOut = ?, SoGioLam = ?, VeSom = ?, GhiChu = CONCAT(COALESCE(GhiChu, ''), ' | ', ?)
          WHERE MaChamCong = ?`,
-        [checkInDate, shiftId, diTre, ghiChu, comp.isLate ? "Đi trễ" : "Hợp lệ", chamCongId]
+        [serverDateTime, soGioLam, veSom, finalGhiChu, chamCongId]
       );
-    } else {
-      const [insertRes] = await db.query(
-        `INSERT INTO chamcong (MaNhanVien, MaCaLam, NgayLam, GioCheckIn, DiTre, VeSom, TrangThai, GhiChu)
-         VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
-        [maNhanVien, shiftId, ngayLam, checkInDate, diTre, comp.isLate ? "Đi trễ" : "Hợp lệ", ghiChu]
+
+      const [empRows] = await db.query(
+        "SELECT HoTen, MaNhanVienCode FROM nhanvien WHERE MaNhanVien = ?",
+        [empId]
       );
-      chamCongId = insertRes.insertId;
+      const emp = empRows[0] || {};
+
+      return res.json({
+        success: true,
+        action: "checkout",
+        message: `Check-out thành công cho ${emp.HoTen || ""} lúc ${serverTime} (Ghi nhận bằng giờ máy chủ)! Số giờ làm: ${soGioLam}h.`,
+        timeSource: "SERVER_TIME",
+        serverTime: serverDateTime,
+        serverTimeString: serverTime,
+        serverDate,
+        soGioLam,
+        veSom,
+        data: {
+          maChamCong: chamCongId,
+          maNhanVien: empId,
+          hoTen: emp.HoTen,
+          gioCheckIn: currentRecord.GioCheckIn,
+          gioCheckOut: serverDateTime,
+          soGioLam,
+          veSom,
+        },
+      });
+    } catch (error) {
+      console.error("Lỗi Check-out Server Time:", error);
+      res.status(500).json({ success: false, message: error.message });
     }
-
-    // Tra cứu thông tin nhân viên
-    const [empRows] = await db.query(
-      "SELECT HoTen, MaNhanVienCode FROM nhanvien WHERE MaNhanVien = ?",
-      [maNhanVien]
-    );
-    const emp = empRows[0] || {};
-
-    return res.status(201).json({
-      success: true,
-      message: comp.isLate
-        ? `CẢNH BÁO: Nhân viên ${emp.HoTen || ""} đi trễ ${comp.lateMinutes} phút! (Ca ${comp.gioBatDau} - Check-in ${comp.gioCheckIn})`
-        : `Check-in thành công cho ${emp.HoTen || ""} đúng giờ!`,
-      isLate: comp.isLate,
-      lateMinutes: comp.lateMinutes,
-      data: {
-        maChamCong: chamCongId,
-        maNhanVien,
-        hoTen: emp.HoTen,
-        maNhanVienCode: emp.MaNhanVienCode,
-        caLam: shiftInfo ? shiftInfo.TenCaLam : "Ca chuẩn",
-        gioBatDau: comp.gioBatDau,
-        gioCheckIn: comp.gioCheckIn,
-        diTre: diTre,
-        soPhutDiTre: comp.lateMinutes,
-        ghiChu,
-      },
-    });
-  } catch (error) {
-    console.error("Lỗi Check-in:", error);
-    res.status(500).json({ success: false, message: error.message });
   }
+);
+
+/**
+ * [POST] /api/timekeeping/button-action (hoặc /api/timekeeping/clock)
+ * API chung tiếp nhận thao tác bấm nút từ UI (Check-in hoặc Check-out)
+ */
+router.post(["/timekeeping/button-action", "/timekeeping/clock"], async (req, res) => {
+  const { action = "checkin" } = req.body;
+  if (action === "checkout") {
+    // Chuyển hướng xử lý Check-out
+    req.url = "/timekeeping/checkout";
+    return router.handle(req, res);
+  }
+  // Mặc định xử lý Check-in
+  req.url = "/timekeeping/checkin";
+  return router.handle(req, res);
 });
 
 /**
