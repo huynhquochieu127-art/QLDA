@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import {
   Users,
@@ -21,6 +21,9 @@ import {
   MapPin,
   X,
   Loader2,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 const API_BASE = "http://localhost:5000/api";
@@ -45,6 +48,18 @@ export default function EmployeeManagement() {
   const [search, setSearch] = useState("");
   const [roles, setRoles] = useState([]);
 
+  // ── Phân trang ──────────────────────────────────────────────────────────────
+  const [currentPage, setCurrentPage]   = useState(1);
+  const [limit]                          = useState(10); // Mặc định 10 NV/trang
+  const [totalPages, setTotalPages]     = useState(1);
+  const [totalItems, setTotalItems]     = useState(0);
+
+  // ── Sắp xếp ─────────────────────────────────────────────────────────────────
+  // sortBy: 'id' | 'name' | 'startDate'
+  // sortOrder: 'asc' | 'desc'
+  const [sortBy, setSortBy]         = useState("id");
+  const [sortOrder, setSortOrder]   = useState("desc");
+
   // Modal thêm nhân viên
   const [showAddModal, setShowAddModal] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
@@ -56,22 +71,46 @@ export default function EmployeeManagement() {
   const [copied, setCopied] = useState(false);
   const [showPassword, setShowPassword] = useState(true);
 
-  // Lấy danh sách nhân viên
-  const fetchEmployees = async (searchTerm = "") => {
+  /**
+   * Lấy danh sách nhân viên với đầy đủ tham số:
+   *   - search   : từ khoá tìm kiếm
+   *   - page     : trang hiện tại
+   *   - limit    : số bản ghi/trang (mặc định 10)
+   *   - sortBy   : 'name' | 'startDate' | 'id'
+   *   - sortOrder: 'asc' | 'desc'
+   */
+  const fetchEmployees = useCallback(async ({
+    searchTerm = search,
+    page       = currentPage,
+    sortByVal  = sortBy,
+    sortOrderVal = sortOrder,
+  } = {}) => {
     setLoading(true);
     try {
       const res = await axios.get(`${API_BASE}/employees`, {
-        params: { search: searchTerm, limit: 50 },
+        params: {
+          search:    searchTerm,
+          page,
+          limit,
+          sortBy:    sortByVal,
+          sortOrder: sortOrderVal,
+        },
       });
       if (res.data && res.data.data) {
         setEmployees(res.data.data);
+        // Đọc metadata phân trang từ response
+        const pg = res.data.pagination || {};
+        setTotalPages(pg.totalPages  || 1);
+        setTotalItems(pg.totalItems  || res.data.data.length);
+        setCurrentPage(pg.currentPage || page);
       }
     } catch (err) {
       console.error("Lỗi lấy danh sách nhân viên:", err);
     } finally {
       setLoading(false);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, currentPage, sortBy, sortOrder, limit]);
 
   // Lấy danh sách vai trò
   const fetchRoles = async () => {
@@ -85,14 +124,32 @@ export default function EmployeeManagement() {
     }
   };
 
+  // Load lần đầu
   useEffect(() => {
-    fetchEmployees();
+    fetchEmployees({});
     fetchRoles();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Khi sort thay đổi → reset về trang 1 và fetch lại
+  const handleSortChange = (newSortBy, newSortOrder) => {
+    setSortBy(newSortBy);
+    setSortOrder(newSortOrder);
+    setCurrentPage(1);
+    fetchEmployees({ page: 1, sortByVal: newSortBy, sortOrderVal: newSortOrder });
+  };
+
+  // Khi chuyển trang
+  const handlePageChange = (newPage) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setCurrentPage(newPage);
+    fetchEmployees({ page: newPage });
+  };
 
   const handleSearch = (e) => {
     e.preventDefault();
-    fetchEmployees(search);
+    setCurrentPage(1);
+    fetchEmployees({ searchTerm: search, page: 1 });
   };
 
   // Submit Form tạo nhân viên
@@ -119,8 +176,9 @@ export default function EmployeeManagement() {
         setHandoverData(res.data.handoverInfo);
         setCopied(false);
 
-        // Tải lại danh sách nhân viên
-        fetchEmployees(search);
+        // Tải lại danh sách nhân viên (về trang 1)
+        setCurrentPage(1);
+        fetchEmployees({ searchTerm: search, page: 1 });
       }
     } catch (err) {
       setErrorMsg(
@@ -209,56 +267,103 @@ export default function EmployeeManagement() {
         </button>
       </div>
 
-      {/* SEARCH BAR */}
-      <form
-        onSubmit={handleSearch}
-        style={{
-          display: "flex",
-          gap: "10px",
-          marginBottom: "20px",
-          maxWidth: "480px",
-        }}
-      >
-        <div style={{ position: "relative", flex: 1 }}>
-          <Search
-            size={18}
+      {/* SEARCH BAR & SORT CONTROLS */}
+      <div style={{ display: "flex", gap: "12px", marginBottom: "20px", flexWrap: "wrap", alignItems: "center" }}>
+        {/* Ô tìm kiếm */}
+        <form onSubmit={handleSearch} style={{ display: "flex", gap: "8px", flex: 1, minWidth: "280px", maxWidth: "460px" }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <Search
+              size={18}
+              style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }}
+            />
+            <input
+              type="text"
+              placeholder="Tìm theo họ tên, SĐT, mã NV hoặc Email..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "9px 12px 9px 38px",
+                borderRadius: "6px",
+                border: "1px solid #cbd5e1",
+                fontSize: "0.9rem",
+              }}
+            />
+          </div>
+          <button
+            type="submit"
             style={{
-              position: "absolute",
-              left: "12px",
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "#94a3b8",
+              padding: "9px 16px",
+              backgroundColor: "#334155",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontWeight: 500,
+              whiteSpace: "nowrap",
             }}
-          />
-          <input
-            type="text"
-            placeholder="Tìm theo họ tên, SĐT, mã NV hoặc Email..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+          >
+            Tìm kiếm
+          </button>
+        </form>
+
+        {/* Điều khiển sắp xếp */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+          <ArrowUpDown size={16} color="#64748b" />
+          <span style={{ fontSize: "0.85rem", color: "#64748b", whiteSpace: "nowrap" }}>Sắp xếp:</span>
+
+          {/* Chọn tiêu chí sắp xếp */}
+          <select
+            value={sortBy}
+            onChange={(e) => handleSortChange(e.target.value, sortOrder)}
             style={{
-              width: "100%",
-              padding: "9px 12px 9px 38px",
+              padding: "7px 10px",
               borderRadius: "6px",
               border: "1px solid #cbd5e1",
-              fontSize: "0.9rem",
+              fontSize: "0.85rem",
+              color: "#334155",
+              cursor: "pointer",
+              backgroundColor: "#fff",
             }}
-          />
+          >
+            <option value="id">Mặc định (Mã NV)</option>
+            <option value="name">Tên nhân viên</option>
+            <option value="startDate">Ngày vào làm</option>
+          </select>
+
+          {/* Chọn thứ tự sắp xếp */}
+          <select
+            value={sortOrder}
+            onChange={(e) => handleSortChange(sortBy, e.target.value)}
+            style={{
+              padding: "7px 10px",
+              borderRadius: "6px",
+              border: "1px solid #cbd5e1",
+              fontSize: "0.85rem",
+              color: "#334155",
+              cursor: "pointer",
+              backgroundColor: "#fff",
+            }}
+          >
+            {sortBy === "name" ? (
+              <>
+                <option value="asc">A → Z</option>
+                <option value="desc">Z → A</option>
+              </>
+            ) : (
+              <>
+                <option value="desc">Mới nhất trước</option>
+                <option value="asc">Cũ nhất trước</option>
+              </>
+            )}
+          </select>
         </div>
-        <button
-          type="submit"
-          style={{
-            padding: "9px 16px",
-            backgroundColor: "#334155",
-            color: "#fff",
-            border: "none",
-            borderRadius: "6px",
-            cursor: "pointer",
-            fontWeight: 500,
-          }}
-        >
-          Tìm kiếm
-        </button>
-      </form>
+
+        {/* Thông tin tổng số */}
+        <span style={{ fontSize: "0.82rem", color: "#94a3b8", whiteSpace: "nowrap" }}>
+          Tổng: <strong style={{ color: "#475569" }}>{totalItems}</strong> nhân viên
+        </span>
+      </div>
 
       {/* DANH SÁCH BẢNG NHÂN VIÊN */}
       <div
@@ -450,6 +555,134 @@ export default function EmployeeManagement() {
             )}
           </tbody>
         </table>
+
+        {/* ── THANH PHÂN TRANG ─────────────────────────────────────── */}
+        {totalPages > 1 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "14px 16px",
+              borderTop: "1px solid #f1f5f9",
+              backgroundColor: "#fafafa",
+              flexWrap: "wrap",
+              gap: "10px",
+            }}
+          >
+            {/* Thông tin trang */}
+            <span style={{ fontSize: "0.83rem", color: "#64748b" }}>
+              Trang <strong>{currentPage}</strong> / {totalPages}
+              &nbsp;·&nbsp;
+              Hiển thị {((currentPage - 1) * limit) + 1}–{Math.min(currentPage * limit, totalItems)} trong tổng {totalItems} nhân viên
+            </span>
+
+            {/* Nút điều hướng */}
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              {/* Trang đầu */}
+              <button
+                onClick={() => handlePageChange(1)}
+                disabled={currentPage === 1}
+                title="Trang đầu"
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: "6px",
+                  border: "1px solid #e2e8f0",
+                  backgroundColor: currentPage === 1 ? "#f8fafc" : "#fff",
+                  color: currentPage === 1 ? "#cbd5e1" : "#475569",
+                  cursor: currentPage === 1 ? "not-allowed" : "pointer",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                }}
+              >
+                «
+              </button>
+
+              {/* Trang trước */}
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: "6px",
+                  border: "1px solid #e2e8f0",
+                  backgroundColor: currentPage === 1 ? "#f8fafc" : "#fff",
+                  color: currentPage === 1 ? "#cbd5e1" : "#475569",
+                  cursor: currentPage === 1 ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  fontSize: "0.85rem",
+                }}
+              >
+                <ChevronLeft size={15} /> Trước
+              </button>
+
+              {/* Số trang (hiển thị tối đa 5 trang xung quanh trang hiện tại) */}
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => Math.abs(p - currentPage) <= 2)
+                .map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => handlePageChange(p)}
+                    style={{
+                      padding: "6px 11px",
+                      borderRadius: "6px",
+                      border: "1px solid",
+                      borderColor: p === currentPage ? "#6366f1" : "#e2e8f0",
+                      backgroundColor: p === currentPage ? "#6366f1" : "#fff",
+                      color: p === currentPage ? "#fff" : "#475569",
+                      fontWeight: p === currentPage ? 700 : 400,
+                      cursor: "pointer",
+                      fontSize: "0.85rem",
+                      minWidth: "34px",
+                    }}
+                  >
+                    {p}
+                  </button>
+                ))}
+
+              {/* Trang sau */}
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: "6px",
+                  border: "1px solid #e2e8f0",
+                  backgroundColor: currentPage === totalPages ? "#f8fafc" : "#fff",
+                  color: currentPage === totalPages ? "#cbd5e1" : "#475569",
+                  cursor: currentPage === totalPages ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  fontSize: "0.85rem",
+                }}
+              >
+                Sau <ChevronRight size={15} />
+              </button>
+
+              {/* Trang cuối */}
+              <button
+                onClick={() => handlePageChange(totalPages)}
+                disabled={currentPage === totalPages}
+                title="Trang cuối"
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: "6px",
+                  border: "1px solid #e2e8f0",
+                  backgroundColor: currentPage === totalPages ? "#f8fafc" : "#fff",
+                  color: currentPage === totalPages ? "#cbd5e1" : "#475569",
+                  cursor: currentPage === totalPages ? "not-allowed" : "pointer",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                }}
+              >
+                »
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ========================================================================= */}

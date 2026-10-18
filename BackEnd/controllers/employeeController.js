@@ -251,62 +251,108 @@ exports.createEmployee = async (req, res) => {
 
 /**
  * [GET] /api/employees
- * Lấy danh sách nhân viên kèm thông tin tài khoản và phân quyền
+ * Lấy danh sách nhân viên có hỗ trợ:
+ *  - Phân trang  : ?page=1&limit=10  (mặc định 10 nhân viên/trang)
+ *  - Tìm kiếm   : ?search=<từ_khóa>
+ *  - Sắp xếp    : ?sortBy=name|startDate  &  ?sortOrder=asc|desc
+ *      + sortBy=name      → Sắp xếp theo Tên (A-Z / Z-A)
+ *      + sortBy=startDate → Sắp xếp theo Ngày vào làm (Mới nhất / Cũ nhất)
  */
 exports.getAllEmployees = async (req, res) => {
   try {
+    // ── 1. Tham số Tìm kiếm ─────────────────────────────────────────────────
     const search = req.query.search || "";
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 20;
-    const offset = (page - 1) * limit;
     const searchParam = `%${search}%`;
 
+    // ── 2. Tham số Phân trang ────────────────────────────────────────────────
+    // Giá trị mặc định: page=1, limit=10 (tránh trả về toàn bộ dữ liệu)
+    const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const offset = (page - 1) * limit;
+
+    // ── 3. Tham số Sắp xếp ──────────────────────────────────────────────────
+    // Dùng whitelist để tránh SQL Injection (KHÔNG bao giờ nhúng thẳng input vào query)
+    const SORT_COLUMN_MAP = {
+      name:      "nv.HoTen",       // Sắp theo Tên
+      startDate: "nv.NgayVaoLam",  // Sắp theo Ngày vào làm
+      id:        "nv.MaNhanVien",  // Sắp theo Mã NV (mặc định)
+    };
+    const SORT_ORDER_ALLOWED = ["ASC", "DESC"];
+
+    const sortByRaw    = (req.query.sortBy    || "id").toLowerCase();
+    const sortOrderRaw = (req.query.sortOrder || "desc").toUpperCase();
+
+    // Nếu giá trị không hợp lệ → dùng mặc định (an toàn)
+    const sortColumn = SORT_COLUMN_MAP[sortByRaw]    || SORT_COLUMN_MAP["id"];
+    const sortOrder  = SORT_ORDER_ALLOWED.includes(sortOrderRaw) ? sortOrderRaw : "DESC";
+
+    // ── 4. Đếm tổng bản ghi (phục vụ tính totalPages) ───────────────────────
     const [countResult] = await db.query(
-      `SELECT COUNT(*) as total 
+      `SELECT COUNT(*) AS total
        FROM nhanvien nv
        LEFT JOIN taikhoan tk ON nv.MaTaiKhoan = tk.MaTaiKhoan
-       WHERE nv.HoTen LIKE ? OR nv.SoDienThoai LIKE ? OR nv.MaNhanVienCode LIKE ? OR tk.Email LIKE ?`,
+       WHERE nv.HoTen        LIKE ?
+          OR nv.SoDienThoai  LIKE ?
+          OR nv.MaNhanVienCode LIKE ?
+          OR tk.Email        LIKE ?`,
       [searchParam, searchParam, searchParam, searchParam]
     );
+    const totalItems = countResult[0].total;
+    const totalPages = Math.ceil(totalItems / limit) || 1;
 
+    // ── 5. Truy vấn dữ liệu có phân trang & sắp xếp ─────────────────────────
+    // sortColumn và sortOrder đã được validate qua whitelist ở trên → an toàn
     const [rows] = await db.query(
-      `SELECT 
-        nv.MaNhanVien,
-        nv.MaNhanVienCode,
-        nv.HoTen,
-        nv.GioiTinh,
-        nv.SoDienThoai,
-        nv.CCCD,
-        nv.DiaChi,
-        nv.ChucVu,
-        nv.LoaiNhanVien,
-        DATE_FORMAT(nv.NgayVaoLam, '%Y-%m-%d') as NgayVaoLam,
-        nv.Luong,
-        nv.TrangThai,
-        tk.MaTaiKhoan,
-        tk.Email,
-        tk.MaVaiTro,
-        tk.TrangThaiHoatDong,
-        vt.TenVaiTro
+      `SELECT
+          nv.MaNhanVien,
+          nv.MaNhanVienCode,
+          nv.HoTen,
+          nv.GioiTinh,
+          nv.SoDienThoai,
+          nv.CCCD,
+          nv.DiaChi,
+          nv.ChucVu,
+          nv.LoaiNhanVien,
+          DATE_FORMAT(nv.NgayVaoLam, '%Y-%m-%d') AS NgayVaoLam,
+          nv.Luong,
+          nv.TrangThai,
+          tk.MaTaiKhoan,
+          tk.Email,
+          tk.MaVaiTro,
+          tk.TrangThaiHoatDong,
+          vt.TenVaiTro
        FROM nhanvien nv
        LEFT JOIN taikhoan tk ON nv.MaTaiKhoan = tk.MaTaiKhoan
-       LEFT JOIN vaitro vt ON tk.MaVaiTro = vt.MaVaiTro
-       WHERE nv.HoTen LIKE ? OR nv.SoDienThoai LIKE ? OR nv.MaNhanVienCode LIKE ? OR tk.Email LIKE ?
-       ORDER BY nv.MaNhanVien DESC
+       LEFT JOIN vaitro   vt ON tk.MaVaiTro   = vt.MaVaiTro
+       WHERE nv.HoTen         LIKE ?
+          OR nv.SoDienThoai   LIKE ?
+          OR nv.MaNhanVienCode LIKE ?
+          OR tk.Email         LIKE ?
+       ORDER BY ${sortColumn} ${sortOrder}
        LIMIT ? OFFSET ?`,
       [searchParam, searchParam, searchParam, searchParam, limit, offset]
     );
 
-    res.json({
+    // ── 6. Trả về kết quả ────────────────────────────────────────────────────
+    return res.json({
       success: true,
+      pagination: {
+        currentPage: page,
+        limit,
+        totalItems,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+      sorting: {
+        sortBy:    sortByRaw,
+        sortOrder: sortOrder.toLowerCase(),
+      },
       data: rows,
-      totalPages: Math.ceil(countResult[0].total / limit) || 1,
-      currentPage: page,
-      totalItems: countResult[0].total,
     });
   } catch (error) {
     console.error("Lỗi lấy danh sách nhân viên:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Lỗi cơ sở dữ liệu: " + error.message,
     });
