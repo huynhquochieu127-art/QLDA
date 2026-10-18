@@ -744,8 +744,9 @@ exports.getShiftRegistrations = async (req, res) => {
  * Nhân viên gửi đăng ký ca làm mới hoặc Quản lý xếp ca trực tiếp vào Database
  */
 exports.createShiftRegistration = async (req, res) => {
+  const connection = await db.getConnection();
   try {
-    await ensureShiftSchema();
+    await ensureShiftSchema(connection);
     const body = req.body;
     const items = Array.isArray(body)
       ? body
@@ -756,6 +757,8 @@ exports.createShiftRegistration = async (req, res) => {
     if (!items || items.length === 0) {
       return res.status(400).json({ success: false, message: "Không có ca làm nào để đăng ký." });
     }
+
+    await connection.beginTransaction();
 
     const createdIds = [];
     for (const item of items) {
@@ -769,20 +772,41 @@ exports.createShiftRegistration = async (req, res) => {
 
       if (!date || !shiftId) continue;
 
-      // Kiểm tra ràng buộc hợp đồng: Part-time không được đăng ký Full-time và Full-time không được đăng ký Part-time
-      const [empRows] = await db.query(
-        "SELECT LoaiNhanVien, ChucVu FROM nhanvien WHERE MaNhanVien = ?",
+      // 1. Kiểm tra thông tin nhân viên & thông tin ca làm
+      const [empRows] = await connection.query(
+        "SELECT LoaiNhanVien, ChucVu, HoTen FROM nhanvien WHERE MaNhanVien = ?",
         [empId]
       );
-      const [shiftRows] = await db.query(
-        "SELECT TenCaLam, LoaiCa FROM calam WHERE MaCaLam = ?",
+      const [shiftRows] = await connection.query(
+        "SELECT TenCaLam, LoaiCa, TargetStaff FROM calam WHERE MaCaLam = ?",
         [shiftId]
       );
 
-      if (empRows.length > 0 && shiftRows.length > 0) {
+      if (shiftRows.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({
+          success: false,
+          message: `Không tìm thấy thông tin ca làm việc (ID: ${shiftId})!`,
+        });
+      }
+
+      const shiftInfo = shiftRows[0];
+      const shiftName = shiftInfo.TenCaLam;
+      const shiftTypeStr = (shiftInfo.LoaiCa || "").toLowerCase();
+
+      // Xác định số lượng người tối đa Quản lý yêu cầu cho ca làm này
+      let maxAllowed = 3;
+      if (shiftInfo.TargetStaff !== null && shiftInfo.TargetStaff !== undefined && Number(shiftInfo.TargetStaff) > 0) {
+        maxAllowed = Number(shiftInfo.TargetStaff);
+      } else if (shiftName === "Ca 3") {
+        maxAllowed = 4;
+      } else if (["Ca A", "Ca B"].includes(shiftName)) {
+        maxAllowed = 4;
+      }
+
+      // 2. Kiểm tra ràng buộc hợp đồng: Part-time không được đăng ký Full-time và Full-time không được đăng ký Part-time
+      if (empRows.length > 0) {
         const empType = (empRows[0].LoaiNhanVien || "").toLowerCase();
-        const shiftTypeStr = (shiftRows[0].LoaiCa || "").toLowerCase();
-        const shiftName = shiftRows[0].TenCaLam;
         const isManagerOrAdmin =
           (empRows[0].ChucVu || "").toLowerCase().includes("quản lý") ||
           (empRows[0].ChucVu || "").toLowerCase().includes("admin") ||
@@ -794,6 +818,7 @@ exports.createShiftRegistration = async (req, res) => {
             empType.includes("part") &&
             (shiftTypeStr.includes("full") || shiftName === "Ca A" || shiftName === "Ca B")
           ) {
+            await connection.rollback();
             return res.status(403).json({
               success: false,
               message: `Nhân viên Part-time không có quyền đăng ký ca làm Full-time (${shiftName})!`,
@@ -803,6 +828,7 @@ exports.createShiftRegistration = async (req, res) => {
             empType.includes("full") &&
             (shiftTypeStr.includes("part") || ["Ca 1", "Ca 2", "Ca 3"].includes(shiftName))
           ) {
+            await connection.rollback();
             return res.status(403).json({
               success: false,
               message: `Nhân viên Full-time không có quyền đăng ký ca làm Part-time (${shiftName})!`,
@@ -811,20 +837,55 @@ exports.createShiftRegistration = async (req, res) => {
         }
       }
 
-      // Kiểm tra xem đã đăng ký ca này vào ngày này chưa
-      const [existing] = await db.query(
-        "SELECT MaDangKy FROM dangky_ca WHERE MaNhanVien = ? AND NgayLam = ? AND MaCaLam = ?",
+      // 3. Kiểm tra xem nhân viên này đã đăng ký ca này vào ngày này hay chưa
+      const [existing] = await connection.query(
+        "SELECT MaDangKy, TrangThai FROM dangky_ca WHERE MaNhanVien = ? AND NgayLam = ? AND MaCaLam = ?",
         [empId, date, shiftId]
       );
 
+      const isAlreadyRegistered =
+        existing.length > 0 && existing[0].TrangThai !== "rejected";
+
+      // 4. KIỂM TRA SỐ LƯỢNG NGƯỜI TỐI ĐA (LOGIC QUAN TRỌNG)
+      // Nếu nhân viên chưa có trong ca (hoặc đã bị từ chối trước đó), đây là lượt đăng ký mới làm tăng sĩ số
+      if (!isAlreadyRegistered) {
+        // Đếm số lượng nhân viên hiện tại đã đăng ký vào ca đó ngày đó (loại trừ các đơn rejected và chính nhân viên này)
+        const [countRows] = await connection.query(
+          `SELECT COUNT(*) AS currentCount 
+           FROM dangky_ca 
+           WHERE NgayLam = ? AND MaCaLam = ? AND TrangThai != 'rejected' AND MaNhanVien != ?`,
+          [date, shiftId, empId]
+        );
+
+        const currentCount = Number(countRows[0]?.currentCount || 0);
+
+        // NẾU ĐÃ ĐỦ: LẬP TỨC CHẶN LẠI VÀ TRẢ VỀ MÃ LỖI THÔNG BÁO "Ca làm việc đã đủ người"
+        if (currentCount >= maxAllowed) {
+          await connection.rollback();
+          return res.status(400).json({
+            success: false,
+            errorCode: "SHIFT_FULL",
+            message: "Ca làm việc đã đủ người",
+            detail: `Ca làm việc (${shiftName}) ngày ${date} đã đủ số lượng người tối đa Quản lý yêu cầu (${currentCount}/${maxAllowed} người). Vui lòng chọn ca khác!`,
+            data: {
+              shiftName,
+              date,
+              currentCount,
+              maxAllowed,
+            },
+          });
+        }
+      }
+
+      // 5. NẾU CHƯA ĐỦ: CHO PHÉP LƯU VÀO DATABASE
       if (existing.length > 0) {
-        await db.query(
+        await connection.query(
           "UPDATE dangky_ca SET TrangThai = ?, GhiChu = ?, TenNhanVien = COALESCE(?, TenNhanVien), ChucVu = COALESCE(?, ChucVu) WHERE MaDangKy = ?",
           [status, ghiChu, staffName, role, existing[0].MaDangKy]
         );
         createdIds.push(existing[0].MaDangKy);
       } else {
-        const [insertRes] = await db.query(
+        const [insertRes] = await connection.query(
           `INSERT INTO dangky_ca (MaNhanVien, MaCaLam, NgayLam, TrangThai, NgayDangKy, GhiChu, TenNhanVien, ChucVu)
            VALUES (?, ?, ?, ?, NOW(), ?, ?, ?)`,
           [empId, shiftId, date, status, ghiChu, staffName, role]
@@ -833,14 +894,20 @@ exports.createShiftRegistration = async (req, res) => {
       }
     }
 
+    await connection.commit();
+
+    // TRẢ VỀ THÀNH CÔNG
     return res.json({
       success: true,
-      message: `Đã lưu thành công ${createdIds.length} lượt đăng ký ca vào Database!`,
+      message: `Đăng ký ca làm việc thành công! Đã lưu ${createdIds.length} lượt đăng ký ca vào Database.`,
       ids: createdIds,
     });
   } catch (error) {
+    await connection.rollback();
     console.error("Lỗi đăng ký ca làm:", error);
     return res.status(500).json({ success: false, message: error.message });
+  } finally {
+    connection.release();
   }
 };
 

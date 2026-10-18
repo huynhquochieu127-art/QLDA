@@ -18,6 +18,8 @@ router.put("/shifts/config-full-time", shiftController.saveFullTimeShiftConfig);
 // Đăng ký ca & Quản lý duyệt ca (lưu trữ trực tiếp Database bảng dangky_ca)
 router.get("/shifts/registrations", shiftController.getShiftRegistrations);
 router.post("/shifts/registrations", shiftController.createShiftRegistration);
+router.post("/shifts/register", shiftController.createShiftRegistration); // API tiếp nhận yêu cầu đăng ký ca từ nhân viên
+router.post("/shifts/registration", shiftController.createShiftRegistration);
 router.put("/shifts/registrations/approve-all", shiftController.approveAllShifts);
 router.put("/shifts/registrations/:id/status", shiftController.updateRegistrationStatus);
 router.put("/shifts/registrations/:id/reassign", shiftController.reassignShift);

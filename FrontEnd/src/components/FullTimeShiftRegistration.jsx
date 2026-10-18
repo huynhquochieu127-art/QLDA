@@ -251,7 +251,10 @@ export default function FullTimeShiftRegistration() {
         fetchRegistrations();
       }
     } catch (err) {
-      alert("Lỗi khi gửi đăng ký ca: " + (err.response?.data?.message || err.message));
+      const errorMsg = err.response?.data?.detail
+        ? `${err.response.data.message}: ${err.response.data.detail}`
+        : err.response?.data?.message || err.message;
+      alert("Lỗi khi gửi đăng ký ca: " + errorMsg);
     }
   };
 
