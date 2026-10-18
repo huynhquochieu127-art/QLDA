@@ -44,6 +44,10 @@ app.use("/api", payrollRoutes);
 const shiftRoutes = require("./routes/shiftRoutes");
 app.use("/api", shiftRoutes);
 
+// Khởi chạy tiến trình chạy ngầm tổng hợp Bảng công nháp ngày cuối tháng
+const { startMonthlyTimesheetJob } = require("./jobs/monthlyTimesheetJob");
+startMonthlyTimesheetJob();
+
 // Lấy Secret Key từ .env hoặc fallback
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_key";
 

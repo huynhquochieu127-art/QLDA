@@ -25,4 +25,9 @@ router.get("/bangcong-thang/my", timesheetController.getMyTimesheet);
 router.post("/bangcong-thang/my/confirm", timesheetController.confirmMyTimesheet);
 router.post("/bangcong-thang/my/dispute", timesheetController.disputeMyTimesheet);
 
+// TIẾN TRÌNH & API TỔNG HỢP BẢNG CÔNG NHÁP (DRAFT) VÀO NGÀY CUỐI CÙNG CỦA THÁNG
+router.post("/bangcong-thang/generate-draft", timesheetController.generateDraftTimesheet);
+router.post("/timesheet/generate-draft", timesheetController.generateDraftTimesheet);
+router.get("/bangcong-thang/draft", timesheetController.getDraftTimesheet);
+
 module.exports = router;

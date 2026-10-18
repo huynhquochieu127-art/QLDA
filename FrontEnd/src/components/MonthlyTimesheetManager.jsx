@@ -16,7 +16,8 @@ import {
   Edit3,
   X,
   ShieldCheck,
-  Info
+  Info,
+  FileText
 } from "lucide-react";
 import { API_BASE, formatMoney } from "../utils/staffWork";
 
@@ -75,6 +76,27 @@ export default function MonthlyTimesheetManager() {
         nam: selectedYear,
       });
       setMessage({ type: "success", text: res.data.message });
+      await fetchMonthlyTimesheet();
+    } catch (err) {
+      setMessage({ type: "error", text: err.response?.data?.message || err.message });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Tạo Bảng công nháp (Draft) từ dữ liệu Check-in/out hợp lệ của máy chủ
+  const handleGenerateDraft = async () => {
+    setActionLoading(true);
+    try {
+      const res = await axios.post(`${API_BASE}/bangcong-thang/generate-draft`, {
+        thang: selectedMonth,
+        nam: selectedYear,
+        force: true, // Quản lý kích hoạt tạo nháp tức thì
+      });
+      setMessage({
+        type: "success",
+        text: `✅ ${res.data.message} (Full-time: ${res.data.summary.nhanVienFullTime} NV tính ngày công, Part-time: ${res.data.summary.nhanVienPartTime} NV tính tổng giờ làm)`,
+      });
       await fetchMonthlyTimesheet();
     } catch (err) {
       setMessage({ type: "error", text: err.response?.data?.message || err.message });
@@ -262,6 +284,15 @@ export default function MonthlyTimesheetManager() {
             title="Tải lại bảng công"
           >
             <RotateCcw size={15} /> Làm mới
+          </button>
+
+          <button
+            onClick={handleGenerateDraft}
+            disabled={actionLoading || isLocked}
+            style={{ ...btnSecondaryStyle, color: "#4f46e5", borderColor: "#c7d2fe", backgroundColor: "#eef2ff", fontWeight: "600" }}
+            title="Lấy dữ liệu Check-in/out hợp lệ của máy chủ để tổng hợp Bảng công nháp (Part-time: giờ làm, Full-time: ngày công)"
+          >
+            <FileText size={15} /> Xuất Bảng công nháp (Draft)
           </button>
 
           <button
