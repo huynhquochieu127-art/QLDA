@@ -173,6 +173,47 @@ async function ensureShiftSchema(conn) {
       }
     }
 
+    // Khởi tạo/đồng bộ 2 ca chính cho Full-time và Quản lý (Ca A, Ca B)
+    const defaultFullTimeShifts = [
+      {
+        tenCaLam: "Ca A",
+        gioBatDau: "07:00:00",
+        gioKetThuc: "15:00:00",
+        soTieng: 8.0,
+        targetStaff: 4,
+        moTa: "Ca A ca sáng 8 tiếng dành cho nhân viên Full-time và Quản lý (07:00 - 15:00)",
+      },
+      {
+        tenCaLam: "Ca B",
+        gioBatDau: "14:30:00",
+        gioKetThuc: "22:30:00",
+        soTieng: 8.0,
+        targetStaff: 4,
+        moTa: "Ca B ca chiều/tối 8 tiếng dành cho nhân viên Full-time và Quản lý (14:30 - 22:30)",
+      },
+    ];
+
+    for (const s of defaultFullTimeShifts) {
+      const [existing] = await target.query(
+        "SELECT MaCaLam FROM calam WHERE TenCaLam = ?",
+        [s.tenCaLam]
+      );
+      if (existing.length > 0) {
+        await target.query(
+          `UPDATE calam SET 
+            GioBatDau = ?, GioKetThuc = ?, SoTieng = ?, TargetStaff = ?, LoaiCa = 'Full-time', MoTa = ?
+           WHERE MaCaLam = ?`,
+          [s.gioBatDau, s.gioKetThuc, s.soTieng, s.targetStaff, s.moTa, existing[0].MaCaLam]
+        );
+      } else {
+        await target.query(
+          `INSERT INTO calam (TenCaLam, GioBatDau, GioKetThuc, SoTieng, TargetStaff, LoaiCa, MoTa)
+           VALUES (?, ?, ?, ?, ?, 'Full-time', ?)`,
+          [s.tenCaLam, s.gioBatDau, s.gioKetThuc, s.soTieng, s.targetStaff, s.moTa]
+        );
+      }
+    }
+
     // Đánh dấu các ca dài khác (nếu có Ca A, Ca B) là Full-time
     await target.query(
       "UPDATE calam SET LoaiCa = 'Full-time' WHERE TenCaLam NOT IN ('Ca 1', 'Ca 2', 'Ca 3')"
@@ -257,13 +298,21 @@ async function resolveEmployeeId(staffIdentifier) {
   return first.length > 0 ? first[0].MaNhanVien : 1;
 }
 
-// Helper: Tìm MaCaLam (INT) từ shiftType ("morning", "Ca 1", v.v.)
+// Helper: Tìm MaCaLam (INT) từ shiftType ("morning", "Ca 1", "Ca A", v.v.)
 async function resolveShiftId(shiftIdentifier) {
-  if (!shiftIdentifier) return 3;
+  if (!shiftIdentifier) return 1;
   if (typeof shiftIdentifier === "number" || /^\d+$/.test(String(shiftIdentifier).trim())) {
     return Number(shiftIdentifier);
   }
   const str = String(shiftIdentifier).toLowerCase().trim();
+  if (str === "ca a" || str === "caa" || str === "ca_a") {
+    const [r] = await db.query("SELECT MaCaLam FROM calam WHERE TenCaLam = 'Ca A' LIMIT 1");
+    if (r.length > 0) return r[0].MaCaLam;
+  }
+  if (str === "ca b" || str === "cab" || str === "ca_b") {
+    const [r] = await db.query("SELECT MaCaLam FROM calam WHERE TenCaLam = 'Ca B' LIMIT 1");
+    if (r.length > 0) return r[0].MaCaLam;
+  }
   if (str === "morning" || str === "ca 1" || str === "ca1") {
     const [r] = await db.query("SELECT MaCaLam FROM calam WHERE TenCaLam = 'Ca 1' LIMIT 1");
     if (r.length > 0) return r[0].MaCaLam;
@@ -278,7 +327,7 @@ async function resolveShiftId(shiftIdentifier) {
   }
   const [any] = await db.query("SELECT MaCaLam FROM calam WHERE TenCaLam = ? LIMIT 1", [shiftIdentifier]);
   if (any.length > 0) return any[0].MaCaLam;
-  return 3;
+  return 1;
 }
 
 /**
@@ -470,6 +519,149 @@ exports.savePartTimeShiftConfig = async (req, res) => {
 };
 
 /**
+ * [GET] /api/shifts/full-time
+ * Lấy danh sách 2 ca làm việc chính (Ca A, Ca B) dành cho Full-time và Quản lý
+ */
+exports.getFullTimeShifts = async (req, res) => {
+  try {
+    await ensureShiftSchema();
+    const [rows] = await db.query(
+      "SELECT * FROM calam WHERE LoaiCa = 'Full-time' OR TenCaLam IN ('Ca A', 'Ca B') ORDER BY MaCaLam ASC"
+    );
+
+    const formatted = rows.map((r, index) => {
+      const defaultStart = index === 0 ? "07:00:00" : "14:30:00";
+      const defaultEnd = index === 0 ? "15:00:00" : "22:30:00";
+      const start = String(r.GioBatDau || defaultStart).slice(0, 5);
+      const end = String(r.GioKetThuc || defaultEnd).slice(0, 5);
+      const hours = r.SoTieng ? Number(r.SoTieng) : calculateShiftHours(start, end);
+
+      return {
+        id: `shift_full_${index + 1}`,
+        maCaLam: r.MaCaLam,
+        tenCaLam: r.TenCaLam,
+        gioBatDau: start,
+        gioKetThuc: end,
+        soTieng: hours,
+        thoiGian: `${start} - ${end}`,
+        thoiLuongChu: `${hours} tiếng`,
+        targetStaff: r.TargetStaff || 4,
+        loaiCa: "Full-time",
+        moTa: r.MoTa || "",
+      };
+    });
+
+    return res.json({
+      success: true,
+      data: formatted,
+    });
+  } catch (error) {
+    console.error("Lỗi lấy danh sách 2 ca Full-time:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * [POST] /api/shifts/config-full-time
+ * Quản lý lưu cấu hình 2 ca chính (Ca A, Ca B) vào Database
+ */
+exports.saveFullTimeShiftConfig = async (req, res) => {
+  const connection = await db.getConnection();
+  try {
+    await ensureShiftSchema(connection);
+    await connection.beginTransaction();
+
+    const shiftsToUpdate = req.body.shifts || req.body;
+
+    if (!Array.isArray(shiftsToUpdate) || shiftsToUpdate.length === 0) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Dữ liệu cấu hình 2 ca Full-time không hợp lệ (cần danh sách các ca).",
+      });
+    }
+
+    const savedResults = [];
+
+    for (const item of shiftsToUpdate) {
+      const tenCaLam = item.tenCaLam || item.name;
+      const defaultStart = tenCaLam === "Ca A" ? "07:00" : "14:30";
+      const defaultEnd = tenCaLam === "Ca A" ? "15:00" : "22:30";
+      const rawStart = item.gioBatDau || item.start || defaultStart;
+      const rawEnd = item.gioKetThuc || item.end || defaultEnd;
+      const targetStaff = item.targetStaff ? parseInt(item.targetStaff, 10) : 4;
+      const moTa =
+        item.moTa ||
+        item.description ||
+        `${tenCaLam} 8 tiếng dành cho nhân viên Full-time và Quản lý (${rawStart} - ${rawEnd})`;
+
+      const gioBatDau = rawStart.length === 5 ? `${rawStart}:00` : rawStart;
+      const gioKetThuc = rawEnd.length === 5 ? `${rawEnd}:00` : rawEnd;
+      const soTieng =
+        item.soTieng !== undefined
+          ? Number(item.soTieng)
+          : calculateShiftHours(rawStart, rawEnd);
+
+      const [existing] = await connection.query(
+        "SELECT MaCaLam FROM calam WHERE TenCaLam = ?",
+        [tenCaLam]
+      );
+
+      let maCaLam;
+      if (existing.length > 0) {
+        maCaLam = existing[0].MaCaLam;
+        await connection.query(
+          `UPDATE calam SET 
+            GioBatDau = ?, 
+            GioKetThuc = ?, 
+            SoTieng = ?, 
+            TargetStaff = ?, 
+            LoaiCa = 'Full-time',
+            MoTa = ?
+           WHERE MaCaLam = ?`,
+          [gioBatDau, gioKetThuc, soTieng, targetStaff, moTa, maCaLam]
+        );
+      } else {
+        const [insertRes] = await connection.query(
+          `INSERT INTO calam (TenCaLam, GioBatDau, GioKetThuc, SoTieng, TargetStaff, LoaiCa, MoTa)
+           VALUES (?, ?, ?, ?, ?, 'Full-time', ?)`,
+          [tenCaLam, gioBatDau, gioKetThuc, soTieng, targetStaff, moTa]
+        );
+        maCaLam = insertRes.insertId;
+      }
+
+      savedResults.push({
+        maCaLam,
+        tenCaLam,
+        gioBatDau,
+        gioKetThuc,
+        soTieng,
+        targetStaff,
+        loaiCa: "Full-time",
+        moTa,
+      });
+    }
+
+    await connection.commit();
+
+    return res.json({
+      success: true,
+      message: "Lưu cấu hình 2 ca chính (Ca A, Ca B) vào Database thành công!",
+      data: savedResults,
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Lỗi lưu cấu hình 2 ca Full-time:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi lưu cấu hình ca làm: " + error.message,
+    });
+  } finally {
+    connection.release();
+  }
+};
+
+/**
  * [GET] /api/shifts/registrations
  * Lấy dữ liệu đăng ký ca từ bảng dangky_ca trong Database
  */
@@ -490,14 +682,17 @@ exports.getShiftRegistrations = async (req, res) => {
         DATE_FORMAT(dkc.NgayLam, '%Y-%m-%d') AS dateKey,
         dkc.MaCaLam AS maCaLam,
         cl.TenCaLam AS tenCaLam,
+        COALESCE(cl.LoaiCa, 'Full-time') AS loaiCa,
         CASE 
+          WHEN cl.TenCaLam = 'Ca A' OR cl.TenCaLam LIKE '%Ca A%' THEN 'ca_a'
+          WHEN cl.TenCaLam = 'Ca B' OR cl.TenCaLam LIKE '%Ca B%' THEN 'ca_b'
           WHEN cl.TenCaLam = 'Ca 1' THEN 'morning'
           WHEN cl.TenCaLam = 'Ca 2' THEN 'afternoon'
           WHEN cl.TenCaLam = 'Ca 3' THEN 'evening'
           WHEN cl.TenCaLam LIKE '%Sáng%' THEN 'morning'
           WHEN cl.TenCaLam LIKE '%Chiều%' THEN 'afternoon'
           WHEN cl.TenCaLam LIKE '%Tối%' THEN 'evening'
-          ELSE 'morning'
+          ELSE 'ca_a'
         END AS shiftType,
         COALESCE(dkc.TrangThai, 'pending') AS status,
         DATE_FORMAT(COALESCE(dkc.NgayDangKy, NOW()), '%d/%m/%Y') AS registeredAt,
@@ -573,6 +768,48 @@ exports.createShiftRegistration = async (req, res) => {
       const role = item.role || item.position || item.chucVu || null;
 
       if (!date || !shiftId) continue;
+
+      // Kiểm tra ràng buộc hợp đồng: Part-time không được đăng ký Full-time và Full-time không được đăng ký Part-time
+      const [empRows] = await db.query(
+        "SELECT LoaiNhanVien, ChucVu FROM nhanvien WHERE MaNhanVien = ?",
+        [empId]
+      );
+      const [shiftRows] = await db.query(
+        "SELECT TenCaLam, LoaiCa FROM calam WHERE MaCaLam = ?",
+        [shiftId]
+      );
+
+      if (empRows.length > 0 && shiftRows.length > 0) {
+        const empType = (empRows[0].LoaiNhanVien || "").toLowerCase();
+        const shiftTypeStr = (shiftRows[0].LoaiCa || "").toLowerCase();
+        const shiftName = shiftRows[0].TenCaLam;
+        const isManagerOrAdmin =
+          (empRows[0].ChucVu || "").toLowerCase().includes("quản lý") ||
+          (empRows[0].ChucVu || "").toLowerCase().includes("admin") ||
+          (role || "").toLowerCase().includes("quản lý") ||
+          (role || "").toLowerCase().includes("admin");
+
+        if (!isManagerOrAdmin) {
+          if (
+            empType.includes("part") &&
+            (shiftTypeStr.includes("full") || shiftName === "Ca A" || shiftName === "Ca B")
+          ) {
+            return res.status(403).json({
+              success: false,
+              message: `Nhân viên Part-time không có quyền đăng ký ca làm Full-time (${shiftName})!`,
+            });
+          }
+          if (
+            empType.includes("full") &&
+            (shiftTypeStr.includes("part") || ["Ca 1", "Ca 2", "Ca 3"].includes(shiftName))
+          ) {
+            return res.status(403).json({
+              success: false,
+              message: `Nhân viên Full-time không có quyền đăng ký ca làm Part-time (${shiftName})!`,
+            });
+          }
+        }
+      }
 
       // Kiểm tra xem đã đăng ký ca này vào ngày này chưa
       const [existing] = await db.query(

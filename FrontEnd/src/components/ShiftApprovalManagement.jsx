@@ -29,32 +29,66 @@ import axios from "axios";
 import "../../css/shifts.css";
 import { toDateKey, formatDateVN, API_BASE } from "../utils/staffWork";
 import PartTimeShiftConfig from "./PartTimeShiftConfig";
+import FullTimeShiftConfig from "./FullTimeShiftConfig";
 
-// 3 Ca làm việc tiêu chuẩn trong ngày
-const SHIFT_TYPES = [
+// 5 Ca làm việc tiêu chuẩn trên hệ thống (2 Ca Full-time & 3 Ca Part-time)
+const ALL_SHIFT_TEMPLATES = [
+  // 2 Ca chính dành cho Full-time & Quản lý (8 tiếng/ca)
+  {
+    id: "ca_a",
+    name: "Ca A",
+    category: "fulltime",
+    categoryLabel: "Full-time",
+    time: "07:00 - 15:00",
+    icon: <Sun size={16} />,
+    colorClass: "ca_a",
+    targetStaff: 4,
+    hours: "8 tiếng",
+  },
+  {
+    id: "ca_b",
+    name: "Ca B",
+    category: "fulltime",
+    categoryLabel: "Full-time",
+    time: "14:30 - 22:30",
+    icon: <Moon size={16} />,
+    colorClass: "ca_b",
+    targetStaff: 4,
+    hours: "8 tiếng",
+  },
+  // 3 Ca ngắn dành cho Part-time / Sinh viên
   {
     id: "morning",
-    name: "Ca Sáng",
+    name: "Ca 1",
+    category: "parttime",
+    categoryLabel: "Part-time",
     time: "07:00 - 12:00",
     icon: <Sun size={16} />,
     colorClass: "morning",
     targetStaff: 3,
+    hours: "5 tiếng",
   },
   {
     id: "afternoon",
-    name: "Ca Chiều",
+    name: "Ca 2",
+    category: "parttime",
+    categoryLabel: "Part-time",
     time: "12:00 - 17:00",
     icon: <Sunset size={16} />,
     colorClass: "afternoon",
     targetStaff: 3,
+    hours: "5 tiếng",
   },
   {
     id: "evening",
-    name: "Ca Tối",
+    name: "Ca 3",
+    category: "parttime",
+    categoryLabel: "Part-time",
     time: "17:00 - 22:30",
     icon: <Moon size={16} />,
     colorClass: "evening",
-    targetStaff: 4, // Ca tối đông khách cần 4 nhân viên
+    targetStaff: 4,
+    hours: "5.5 tiếng",
   },
 ];
 
@@ -81,22 +115,25 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
   });
 
   const [viewMode, setViewMode] = useState("calendar"); // 'calendar' | 'table'
+  const [shiftCategoryFilter, setShiftCategoryFilter] = useState("all"); // 'all' | 'fulltime' | 'parttime'
+  const [shiftTypes, setShiftTypes] = useState(ALL_SHIFT_TEMPLATES);
   const [draggedItem, setDraggedItem] = useState(null); // Item đang được kéo thả
   const [dragOverSlot, setDragOverSlot] = useState(null); // Slot đang hover kéo qua
 
   // Modal State
   const [reassignModalItem, setReassignModalItem] = useState(null); // Chuyển ca nhanh
-  const [newTargetShift, setNewTargetShift] = useState("morning");
+  const [newTargetShift, setNewTargetShift] = useState("ca_a");
   const [newTargetDate, setNewTargetDate] = useState("");
 
   const [showAssignModal, setShowAssignModal] = useState(false); // Xếp thêm ca
   const [showConfigModal, setShowConfigModal] = useState(false); // Cấu hình 3 ca Part-time
+  const [showFullTimeModal, setShowFullTimeModal] = useState(false); // Cấu hình 2 ca Full-time & Quản lý
   const [assignForm, setAssignForm] = useState({
     staffId: "",
     staffName: "",
     role: "Thu ngân",
     date: "",
-    shiftType: "morning",
+    shiftType: "ca_a",
   });
 
   // Filter trong Table View
@@ -183,6 +220,50 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
   useEffect(() => {
     fetchShiftRegistrations();
   }, [currentWeekStart]);
+
+  // Đồng bộ thời gian thực tế đã cấu hình từ CSDL cho 2 ca Full-time và 3 ca Part-time
+  useEffect(() => {
+    Promise.all([
+      axios.get(`${API_BASE}/shifts/full-time`).catch(() => ({ data: {} })),
+      axios.get(`${API_BASE}/shifts/part-time`).catch(() => ({ data: {} })),
+    ]).then(([fullRes, partRes]) => {
+      setShiftTypes((prev) => {
+        const next = prev.map((item) => ({ ...item }));
+        if (fullRes.data?.success && Array.isArray(fullRes.data.data)) {
+          fullRes.data.data.forEach((s) => {
+            const match = next.find(
+              (item) =>
+                item.name === s.tenCaLam ||
+                (s.tenCaLam === "Ca A" && item.id === "ca_a") ||
+                (s.tenCaLam === "Ca B" && item.id === "ca_b")
+            );
+            if (match) {
+              match.time = `${s.gioBatDau} - ${s.gioKetThuc}`;
+              match.targetStaff = s.targetStaff || 4;
+              match.maCaLam = s.maCaLam;
+            }
+          });
+        }
+        if (partRes.data?.success && Array.isArray(partRes.data.data)) {
+          partRes.data.data.forEach((s) => {
+            const match = next.find(
+              (item) =>
+                item.name === s.tenCaLam ||
+                (s.tenCaLam === "Ca 1" && item.id === "morning") ||
+                (s.tenCaLam === "Ca 2" && item.id === "afternoon") ||
+                (s.tenCaLam === "Ca 3" && item.id === "evening")
+            );
+            if (match) {
+              match.time = `${s.gioBatDau} - ${s.gioKetThuc}`;
+              match.targetStaff = s.targetStaff || 3;
+              match.maCaLam = s.maCaLam;
+            }
+          });
+        }
+        return next;
+      });
+    });
+  }, [showConfigModal, showFullTimeModal]);
 
   // Điều hướng tuần
   const handlePrevWeek = () => {
@@ -365,7 +446,7 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
     if (!reassignModalItem) return;
 
     const targetShiftName =
-      SHIFT_TYPES.find((s) => s.id === newTargetShift)?.name || newTargetShift;
+      shiftTypes.find((s) => s.id === newTargetShift)?.name || newTargetShift;
 
     try {
       await axios.put(`${API_BASE}/shifts/registrations/${reassignModalItem.id}/reassign`, {
@@ -467,14 +548,16 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
   // Tính số lượng ca bị thiếu người
   let understaffedSlotsCount = 0;
   weekDays.forEach((day) => {
-    SHIFT_TYPES.forEach((shift) => {
+    shiftTypes.forEach((shift) => {
       const countInSlot = currentWeekShifts.filter(
         (s) =>
           s.dateKey === day.dateKey &&
-          s.shiftType === shift.id &&
+          (s.shiftType === shift.id ||
+            s.tenCaLam === shift.name ||
+            (shift.maCaLam && s.maCaLam === shift.maCaLam)) &&
           s.status === "approved"
       ).length;
-      if (countInSlot < shift.targetStaff) {
+      if (countInSlot < (shift.targetStaff || 3)) {
         understaffedSlotsCount++;
       }
     });
@@ -691,6 +774,39 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
 
         {/* Nút tác vụ quản lý */}
         <div className="shifts-actions">
+          {/* Bộ lọc ca làm: Tất cả / Full-time / Part-time */}
+          <div className="view-mode-toggle" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+            <button
+              className={`view-mode-btn ${shiftCategoryFilter === "all" ? "active" : ""}`}
+              onClick={() => setShiftCategoryFilter("all")}
+              title="Xem tất cả các ca (Full-time & Part-time)"
+            >
+              🌐 Tất cả ({shiftTypes.length} ca)
+            </button>
+            <button
+              className={`view-mode-btn ${shiftCategoryFilter === "fulltime" ? "active" : ""}`}
+              onClick={() => setShiftCategoryFilter("fulltime")}
+              style={{
+                color: shiftCategoryFilter === "fulltime" ? "#ffffff" : "#15803d",
+                backgroundColor: shiftCategoryFilter === "fulltime" ? "#16a34a" : "transparent",
+              }}
+              title="Chỉ xem 2 Ca Full-time & Quản lý (Ca A, Ca B)"
+            >
+              👔 2 Ca Full-time
+            </button>
+            <button
+              className={`view-mode-btn ${shiftCategoryFilter === "parttime" ? "active" : ""}`}
+              onClick={() => setShiftCategoryFilter("parttime")}
+              style={{
+                color: shiftCategoryFilter === "parttime" ? "#ffffff" : "#2563eb",
+                backgroundColor: shiftCategoryFilter === "parttime" ? "#2563eb" : "transparent",
+              }}
+              title="Chỉ xem 3 Ca Part-time / Sinh viên (Ca 1, Ca 2, Ca 3)"
+            >
+              🎓 3 Ca Part-time
+            </button>
+          </div>
+
           {/* Toggle Chế độ xem: Lịch / Bảng */}
           <div className="view-mode-toggle">
             <button
@@ -730,6 +846,25 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
             onClick={() => handleOpenAssignModal()}
           >
             <Plus size={16} /> Xếp ca trực tiếp
+          </button>
+
+          {/* Cấu hình 2 ca Full-time & Quản lý */}
+          <button
+            className="btn-secondary-action"
+            style={{
+              padding: "8px 14px",
+              background: "#f0fdf4",
+              color: "#15803d",
+              borderColor: "#bbf7d0",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+            onClick={() => setShowFullTimeModal(true)}
+            title="Cấu hình khung giờ 2 ca chính cho Full-time & Quản lý (Ca A, Ca B)"
+          >
+            <Clock size={15} /> 2 Ca Full-time
           </button>
 
           {/* Cấu hình 3 ca Part-time */}
@@ -786,30 +921,54 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
               </div>
             ))}
 
-            {/* 3 HÀNG CHO 3 CA: SÁNG, CHIỀU, TỐI */}
-            {SHIFT_TYPES.map((shift) => (
-              <React.Fragment key={shift.id}>
-                {/* Tiêu đề loại ca ở cột đầu */}
-                <div className="shift-row-header">
-                  <div className={`shift-title-wrapper ${shift.colorClass}`}>
-                    {shift.icon}
-                    <span>{shift.name}</span>
+            {/* CÁC HÀNG CA LÀM VIỆC THEO BỘ LỌC (FULL-TIME & PART-TIME) */}
+            {shiftTypes
+              .filter((shift) =>
+                shiftCategoryFilter === "all"
+                  ? true
+                  : shift.category === shiftCategoryFilter
+              )
+              .map((shift) => (
+                <React.Fragment key={shift.id}>
+                  {/* Tiêu đề loại ca ở cột đầu */}
+                  <div className="shift-row-header">
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span
+                        style={{
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
+                          padding: "1px 6px",
+                          borderRadius: 999,
+                          background: shift.category === "fulltime" ? "#f0fdf4" : "#eff6ff",
+                          color: shift.category === "fulltime" ? "#15803d" : "#1d4ed8",
+                          border: `1px solid ${shift.category === "fulltime" ? "#bbf7d0" : "#bfdbfe"}`,
+                        }}
+                      >
+                        {shift.categoryLabel}
+                      </span>
+                      <span style={{ fontSize: "0.72rem", color: "#64748b" }}>{shift.hours}</span>
+                    </div>
+                    <div className={`shift-title-wrapper ${shift.colorClass}`}>
+                      {shift.icon}
+                      <span>{shift.name}</span>
+                    </div>
+                    <div className="shift-hours">{shift.time}</div>
+                    <div className="shift-target">
+                      Định mức: <strong>{shift.targetStaff} NV</strong>
+                    </div>
                   </div>
-                  <div className="shift-hours">{shift.time}</div>
-                  <div className="shift-target">
-                    Định mức: <strong>{shift.targetStaff} NV</strong>
-                  </div>
-                </div>
 
-                {/* 7 Ô ca cho 7 ngày trong tuần */}
-                {weekDays.map((day) => {
-                  const slotKey = `${day.dateKey}_${shift.id}`;
-                  // Lọc danh sách nhân viên trong ô này
-                  const staffInSlot = shiftRegistrations.filter(
-                    (item) =>
-                      item.dateKey === day.dateKey &&
-                      item.shiftType === shift.id
-                  );
+                  {/* 7 Ô ca cho 7 ngày trong tuần */}
+                  {weekDays.map((day) => {
+                    const slotKey = `${day.dateKey}_${shift.id}`;
+                    // Lọc danh sách nhân viên trong ô này (khớp theo shift.id, tenCaLam hoặc maCaLam)
+                    const staffInSlot = shiftRegistrations.filter(
+                      (item) =>
+                        item.dateKey === day.dateKey &&
+                        (item.shiftType === shift.id ||
+                          item.tenCaLam === shift.name ||
+                          (shift.maCaLam && item.maCaLam === shift.maCaLam))
+                    );
 
                   const approvedCountInSlot = staffInSlot.filter(
                     (s) => s.status === "approved"
@@ -1003,9 +1162,15 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
               onChange={(e) => setTableFilterShift(e.target.value)}
             >
               <option value="all">Tất cả các ca</option>
-              <option value="morning">Ca Sáng (07:00 - 12:00)</option>
-              <option value="afternoon">Ca Chiều (12:00 - 17:00)</option>
-              <option value="evening">Ca Tối (17:00 - 22:30)</option>
+              <optgroup label="2 Ca Full-time & Quản lý">
+                <option value="ca_a">Ca A (07:00 - 15:00)</option>
+                <option value="ca_b">Ca B (14:30 - 22:30)</option>
+              </optgroup>
+              <optgroup label="3 Ca Part-time / Sinh viên">
+                <option value="morning">Ca 1 (07:00 - 12:00)</option>
+                <option value="afternoon">Ca 2 (12:00 - 17:00)</option>
+                <option value="evening">Ca 3 (17:00 - 22:30)</option>
+              </optgroup>
             </select>
           </div>
 
@@ -1034,7 +1199,14 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
                   const matchStatus =
                     tableFilterStatus === "all" || item.status === tableFilterStatus;
                   const matchShift =
-                    tableFilterShift === "all" || item.shiftType === tableFilterShift;
+                    tableFilterShift === "all" ||
+                    item.shiftType === tableFilterShift ||
+                    item.tenCaLam === tableFilterShift ||
+                    (tableFilterShift === "ca_a" && (item.tenCaLam === "Ca A" || item.shiftType === "ca_a")) ||
+                    (tableFilterShift === "ca_b" && (item.tenCaLam === "Ca B" || item.shiftType === "ca_b")) ||
+                    (tableFilterShift === "morning" && (item.tenCaLam === "Ca 1" || item.shiftType === "morning")) ||
+                    (tableFilterShift === "afternoon" && (item.tenCaLam === "Ca 2" || item.shiftType === "afternoon")) ||
+                    (tableFilterShift === "evening" && (item.tenCaLam === "Ca 3" || item.shiftType === "evening"));
                   return matchStatus && matchShift;
                 });
 
@@ -1051,7 +1223,21 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
                 const dayNamesMap = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
 
                 return filteredRows.map((item) => {
-                  const shiftObj = SHIFT_TYPES.find((s) => s.id === item.shiftType);
+                  const shiftObj = shiftTypes.find(
+                    (s) =>
+                      s.id === item.shiftType ||
+                      s.name === item.tenCaLam ||
+                      (s.maCaLam && s.maCaLam === item.maCaLam)
+                  ) || {
+                    name: item.tenCaLam || "Ca làm",
+                    time: item.gioBatDau
+                      ? `${String(item.gioBatDau).slice(0, 5)} - ${String(item.gioKetThuc).slice(0, 5)}`
+                      : "",
+                    colorClass: item.loaiCa === "Full-time" ? "ca_a" : "morning",
+                    icon: <Clock size={15} />,
+                    category: item.loaiCa === "Full-time" ? "fulltime" : "parttime",
+                    categoryLabel: item.loaiCa || "Full-time",
+                  };
                   const dayObj = weekDays.find((w) => w.dateKey === item.dateKey);
                   const dayName =
                     dayObj?.dayLabel ||
@@ -1070,12 +1256,26 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
                       <td>
                         <span
                           className={`shift-title-wrapper ${shiftObj?.colorClass || "morning"}`}
-                          style={{ fontSize: 13 }}
+                          style={{ fontSize: 13, display: "inline-flex", alignItems: "center" }}
                         >
                           {shiftObj?.icon} {item.tenCaLam || shiftObj?.name} (
                           {item.gioBatDau
                             ? `${String(item.gioBatDau).slice(0, 5)} - ${String(item.gioKetThuc).slice(0, 5)}`
                             : shiftObj?.time})
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "0.7rem",
+                            fontWeight: 700,
+                            padding: "1px 7px",
+                            borderRadius: 999,
+                            background: shiftObj.category === "fulltime" || item.loaiCa === "Full-time" ? "#f0fdf4" : "#eff6ff",
+                            color: shiftObj.category === "fulltime" || item.loaiCa === "Full-time" ? "#15803d" : "#1d4ed8",
+                            border: `1px solid ${shiftObj.category === "fulltime" || item.loaiCa === "Full-time" ? "#bbf7d0" : "#bfdbfe"}`,
+                            marginLeft: 6,
+                          }}
+                        >
+                          {shiftObj.category === "fulltime" || item.loaiCa === "Full-time" ? "Full-time" : "Part-time"}
                         </span>
                       </td>
                       <td>
@@ -1192,7 +1392,7 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
                   <p style={{ margin: "4px 0 0 0", fontSize: 13, color: "#64748b" }}>
                     Ca hiện tại:{" "}
                     <strong>
-                      {SHIFT_TYPES.find((s) => s.id === reassignModalItem.shiftType)?.name}
+                      {shiftTypes.find((s) => s.id === reassignModalItem.shiftType)?.name || reassignModalItem.shiftType}
                     </strong>{" "}
                     - Ngày {formatDateVN(reassignModalItem.dateKey)}
                   </p>
@@ -1218,11 +1418,24 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
                     value={newTargetShift}
                     onChange={(e) => setNewTargetShift(e.target.value)}
                   >
-                    {SHIFT_TYPES.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.name} ({st.time})
-                      </option>
-                    ))}
+                    <optgroup label="2 Ca Full-time & Quản lý (8 tiếng)">
+                      {shiftTypes
+                        .filter((st) => st.category === "fulltime")
+                        .map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.name} ({st.time})
+                          </option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="3 Ca Part-time / Sinh viên (5 tiếng)">
+                      {shiftTypes
+                        .filter((st) => st.category === "parttime")
+                        .map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.name} ({st.time})
+                          </option>
+                        ))}
+                    </optgroup>
                   </select>
                 </div>
               </div>
@@ -1319,11 +1532,24 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
                       })
                     }
                   >
-                    {SHIFT_TYPES.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.name} ({st.time})
-                      </option>
-                    ))}
+                    <optgroup label="2 Ca Full-time & Quản lý (8 tiếng)">
+                      {shiftTypes
+                        .filter((st) => st.category === "fulltime")
+                        .map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.name} ({st.time})
+                          </option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="3 Ca Part-time / Sinh viên (5 tiếng)">
+                      {shiftTypes
+                        .filter((st) => st.category === "parttime")
+                        .map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.name} ({st.time})
+                          </option>
+                        ))}
+                    </optgroup>
                   </select>
                 </div>
               </div>
@@ -1347,6 +1573,10 @@ export default function ShiftApprovalManagement({ currentRole = "manager" }) {
 
       {showConfigModal && (
         <PartTimeShiftConfig isModal={true} onClose={() => setShowConfigModal(false)} />
+      )}
+
+      {showFullTimeModal && (
+        <FullTimeShiftConfig isModal={true} onClose={() => setShowFullTimeModal(false)} />
       )}
     </div>
   );

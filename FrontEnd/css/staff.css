@@ -488,6 +488,8 @@
 .reg-shift-block .time { font-size: 0.75rem; color: #64748b; }
 .reg-shift-block .slots { font-size: 0.72rem; color: #64748b; margin-top: 4px; }
 
+.reg-shift-block.ca_a .title { color: #15803d; }
+.reg-shift-block.ca_b .title { color: #0369a1; }
 .reg-shift-block.morning .title { color: #b45309; }
 .reg-shift-block.afternoon .title { color: #c2410c; }
 .reg-shift-block.evening .title { color: #4338ca; }
