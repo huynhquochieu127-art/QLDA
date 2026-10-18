@@ -224,6 +224,14 @@ export default function ShiftRegistration() {
       }
       return;
     }
+    // Nếu ca đã đủ người (hết chỗ), chặn ngay không cho chọn
+    const count = countInSlot(dateKey, shift);
+    const targetLimit = shift.targetStaff || 3;
+    if (count >= targetLimit) {
+      alert(`Ca làm việc ${shift.name} ngày ${dateKey} đã đủ người (${count}/${targetLimit} NV). Đã đầy / Hết chỗ, không thể đăng ký!`);
+      return;
+    }
+
     const key = `${dateKey}_${shift.id}`;
     setSelected((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
   };
@@ -470,8 +478,19 @@ export default function ShiftRegistration() {
           <div style={{ fontSize: "0.9rem", color: "#1e40af", fontWeight: 700 }}>
             📅 Lịch đăng ký 3 ca ngắn tuần: {weekRangeText}
           </div>
-          <div style={{ fontSize: "0.8rem", color: "#64748b" }}>
-            Bấm chọn Ca 1, Ca 2 hoặc Ca 3 phù hợp lịch học
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: "0.78rem" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#16a34a", background: "#f0fdf4", padding: "2px 6px", borderRadius: 4, border: "1px solid #bbf7d0" }}>
+              ● Đã duyệt
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#d97706", background: "#fffbeb", padding: "2px 6px", borderRadius: 4, border: "1px solid #fde68a" }}>
+              ● Chờ duyệt
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#2563eb", background: "#eff6ff", padding: "2px 6px", borderRadius: 4, border: "1px solid #bfdbfe" }}>
+              ✓ Đang chọn
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#b91c1c", background: "#fee2e2", padding: "2px 6px", borderRadius: 4, border: "1px solid #fca5a5", fontWeight: 700 }}>
+              🚫 Đã đầy / Hết chỗ
+            </span>
           </div>
         </div>
 
@@ -490,10 +509,11 @@ export default function ShiftRegistration() {
                     const count = countInSlot(day.dateKey, shift);
                     const targetLimit = shift.targetStaff || 3;
                     const isFull = count >= targetLimit;
+                    const isFullBlock = !myReg && isFull;
                     const disabled =
                       !isEditableWeek ||
                       (myReg && myReg.status !== "pending") ||
-                      (!myReg && !isSelected && isFull);
+                      isFullBlock;
 
                     return (
                       <button
@@ -501,15 +521,25 @@ export default function ShiftRegistration() {
                         type="button"
                         className={`reg-shift-block ${shift.colorClass} ${isSelected ? "selected" : ""} ${
                           myReg ? `status-${myReg.status}` : ""
-                        }`}
+                        } ${isFullBlock ? "is-full" : ""}`}
                         disabled={disabled}
                         onClick={() => handleClickShift(day.dateKey, shift)}
                         title={
                           myReg
                             ? `Trạng thái: ${STATUS_TEXT[myReg.status]}`
                             : isFull
-                            ? "Ca đã đủ chỉ tiêu sinh viên"
+                            ? `Ca ${shift.name} ngày ${day.dateKey} đã đủ số lượng người tối đa (${count}/${targetLimit} NV). Đã đầy / Hết chỗ!`
                             : "Bấm để chọn hoặc bỏ chọn ca này"
+                        }
+                        style={
+                          isFullBlock
+                            ? {
+                                backgroundColor: "#f1f5f9",
+                                borderColor: "#cbd5e1",
+                                cursor: "not-allowed",
+                                opacity: 0.8,
+                              }
+                            : undefined
                         }
                       >
                         <div className="title">
@@ -524,9 +554,25 @@ export default function ShiftRegistration() {
                           ) : isSelected ? (
                             <strong style={{ color: "#2563eb" }}>✓ Đã chọn</strong>
                           ) : isFull ? (
-                            <span style={{ color: "#dc2626" }}>Đã đủ người</span>
+                            <span
+                              className="badge-full"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 3,
+                                backgroundColor: "#fee2e2",
+                                color: "#b91c1c",
+                                fontWeight: 700,
+                                fontSize: "0.72rem",
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                                border: "1px solid #fca5a5",
+                              }}
+                            >
+                              🚫 Đã đầy / Hết chỗ ({count}/{targetLimit})
+                            </span>
                           ) : (
-                            `Đã có ${count}/${targetLimit} NV`
+                            <span>Đã có {count}/${targetLimit} NV</span>
                           )}
                         </div>
                       </button>
