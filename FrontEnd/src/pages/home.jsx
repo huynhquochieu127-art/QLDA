@@ -25,6 +25,7 @@ import PayrollManagement from "../components/PayrollManagement";
 import PartTimeShiftConfig from "../components/PartTimeShiftConfig";
 import FullTimeShiftConfig from "../components/FullTimeShiftConfig";
 import FullTimeShiftRegistration from "../components/FullTimeShiftRegistration";
+import NotificationBell from "../components/NotificationBell";
 import {
   Clock,
   User,
@@ -326,6 +327,12 @@ export default function Home() {
               <Clock size={16} />
               <span>{currentTime}</span>
             </div>
+
+            {/* Chuông thông báo hệ thống (Notification) */}
+            <NotificationBell
+              currentUser={user}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+            />
 
             <div className="user-profile">
               <User size={20} />

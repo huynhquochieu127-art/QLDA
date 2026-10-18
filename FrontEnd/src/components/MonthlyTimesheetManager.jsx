@@ -105,6 +105,31 @@ export default function MonthlyTimesheetManager() {
     }
   };
 
+  // Quản lý bấm "Gửi đối soát": đẩy thông báo kèm link xem chi tiết Bảng công nháp đến từng nhân viên tương ứng
+  const handleSendForReview = async () => {
+    if (isLocked) {
+      alert("Bảng công tháng này đã chốt sổ và bị khóa!");
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await axios.post(`${API_BASE}/bangcong-thang/send-for-review`, {
+        thang: selectedMonth,
+        nam: selectedYear,
+      });
+      setMessage({
+        type: "success",
+        text: `✅ ${res.data.message}`,
+      });
+      await fetchMonthlyTimesheet();
+    } catch (err) {
+      setMessage({ type: "error", text: err.response?.data?.message || err.message });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+
   // Quản lý mở modal chỉnh sửa / xử lý khiếu nại
   const openEditModal = (item) => {
     if (summary?.isLocked) {
@@ -293,6 +318,22 @@ export default function MonthlyTimesheetManager() {
             title="Lấy dữ liệu Check-in/out hợp lệ của máy chủ để tổng hợp Bảng công nháp (Part-time: giờ làm, Full-time: ngày công)"
           >
             <FileText size={15} /> Xuất Bảng công nháp (Draft)
+          </button>
+
+          <button
+            onClick={handleSendForReview}
+            disabled={actionLoading || isLocked}
+            style={{
+              ...btnSecondaryStyle,
+              color: "#0369a1",
+              borderColor: "#7dd3fc",
+              backgroundColor: "#f0f9ff",
+              fontWeight: "700",
+              boxShadow: "0 1px 2px rgba(2, 132, 199, 0.15)",
+            }}
+            title="Gửi đối soát: Đẩy thông báo kèm link xem chi tiết Bảng công nháp đến từng nhân viên tương ứng"
+          >
+            <Send size={15} /> Gửi đối soát
           </button>
 
           <button

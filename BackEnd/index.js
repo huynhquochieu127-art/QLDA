@@ -26,6 +26,8 @@ io.on("connection", (socket) => {
 });
 // ─────────────────────────────────────────────────────────────────────────────
 
+app.set("io", io);
+
 app.use(cors());
 app.use(express.json());
 app.use("/api", employeeRoutes);
@@ -43,6 +45,9 @@ app.use("/api", payrollRoutes);
 
 const shiftRoutes = require("./routes/shiftRoutes");
 app.use("/api", shiftRoutes);
+
+const notificationRoutes = require("./routes/notificationRoutes");
+app.use("/api", notificationRoutes);
 
 // Khởi chạy tiến trình chạy ngầm tổng hợp Bảng công nháp ngày cuối tháng
 const { startMonthlyTimesheetJob } = require("./jobs/monthlyTimesheetJob");

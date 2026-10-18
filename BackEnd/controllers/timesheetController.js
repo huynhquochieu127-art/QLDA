@@ -832,3 +832,123 @@ exports.getDraftTimesheet = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+/**
+ * 12. [POST] /api/bangcong-thang/send-for-review
+ * Quản lý bấm nút "Gửi đối soát":
+ * - Cập nhật trạng thái các bảng công tháng sang 'sent_to_emp'
+ * - Đẩy thông báo (Notification) kèm link xem chi tiết Bảng công nháp đến từng nhân viên tương ứng
+ * - Phát sự kiện realtime qua Socket.IO (new_notification)
+ */
+exports.sendTimesheetForReview = async (req, res) => {
+  try {
+    const now = new Date();
+    const thang = parseInt(req.body.thang || req.query.thang) || now.getMonth() + 1;
+    const nam = parseInt(req.body.nam || req.query.nam) || now.getFullYear();
+
+    // 1. Kiểm tra nếu chưa có bảng công trong tháng, tự sinh trước
+    const [existing] = await db.query(
+      "SELECT COUNT(*) AS total FROM bangcong_thang WHERE Thang = ? AND Nam = ?",
+      [thang, nam]
+    );
+    if (existing[0].total === 0) {
+      await generateDraftTimesheetInternal(thang, nam, { force: true });
+    }
+
+    // 2. Lấy danh sách bảng công trong tháng kèm thông tin nhân viên
+    const [records] = await db.query(
+      `SELECT 
+        bc.MaBangCong,
+        bc.MaNhanVien,
+        bc.Thang,
+        bc.Nam,
+        bc.SoCong,
+        bc.SoGioLam,
+        bc.SoNgayTre,
+        bc.TrangThai,
+        nv.HoTen,
+        nv.MaNhanVienCode,
+        nv.LoaiNhanVien
+       FROM bangcong_thang bc
+       JOIN nhanvien nv ON bc.MaNhanVien = nv.MaNhanVien
+       WHERE bc.Thang = ? AND bc.Nam = ?`,
+      [thang, nam]
+    );
+
+    if (records.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Không có dữ liệu bảng công cho tháng ${thang}/${nam} để gửi đối soát!`,
+      });
+    }
+
+    // 3. Cập nhật trạng thái các bản ghi sang 'sent_to_emp' (nếu đang ở trạng thái draft hoặc sent_to_emp)
+    await db.query(
+      `UPDATE bangcong_thang 
+       SET TrangThai = 'sent_to_emp',
+           NgayGui = NOW()
+       WHERE Thang = ? AND Nam = ? AND TrangThai IN ('draft', 'sent_to_emp')`,
+      [thang, nam]
+    );
+
+    // 4. Lấy đối tượng Socket.IO (nếu có)
+    const io = req.app?.get("io");
+
+    // 5. Đẩy thông báo (Notification) kèm theo link xem chi tiết Bảng công nháp đến từng nhân viên tương ứng
+    let sentCount = 0;
+    const notificationsCreated = [];
+
+    for (const emp of records) {
+      const isPartTime = (emp.LoaiNhanVien || "").toLowerCase().includes("part");
+      const tieuDe = `📋 Bảng công nháp tháng ${thang}/${nam} đã sẵn sàng đối soát`;
+
+      const summaryText = isPartTime
+        ? `Tổng số giờ làm: ${emp.SoGioLam || 0} giờ (${emp.SoCong || 0} ca, ${emp.SoNgayTre || 0} lần trễ).`
+        : `Tổng số ngày công: ${emp.SoCong || 0} công (${emp.SoGioLam || 0} giờ làm, ${emp.SoNgayTre || 0} lần trễ).`;
+
+      const noiDung = `Quản lý đã gửi Bảng công nháp tháng ${thang}/${nam}. ${summaryText} Vui lòng nhấn vào link bên dưới để xem chi tiết Bảng công nháp và bấm Xác nhận đúng hoặc Báo cáo sai sót.`;
+      const link = `#my_timesheet?thang=${thang}&nam=${nam}`;
+
+      // Lưu vào CSDL bảng thongbao
+      const [insertRes] = await db.query(
+        `INSERT INTO thongbao (TieuDe, NoiDung, Loai, MaNhanVien, Link, DaXem, NgayTao)
+         VALUES (?, ?, 'timesheet_review', ?, ?, 0, NOW())`,
+        [tieuDe, noiDung, emp.MaNhanVien, link]
+      );
+
+      const notifItem = {
+        maTB: insertRes.insertId,
+        maNhanVien: emp.MaNhanVien,
+        hoTen: emp.HoTen,
+        tieuDe,
+        noiDung,
+        link,
+        loai: "timesheet_review",
+        thang,
+        nam,
+        ngayTao: new Date(),
+      };
+
+      notificationsCreated.push(notifItem);
+
+      // Bắn sự kiện realtime qua Socket.IO
+      if (io) {
+        io.emit("new_notification", notifItem);
+      }
+      sentCount++;
+    }
+
+    return res.json({
+      success: true,
+      message: `Đã gửi đối soát thành công! Hệ thống đã đẩy thông báo kèm link xem chi tiết Bảng công nháp đến ${sentCount} nhân viên.`,
+      thang,
+      nam,
+      sentCount,
+      notifications: notificationsCreated,
+    });
+  } catch (error) {
+    console.error("Lỗi sendTimesheetForReview:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+

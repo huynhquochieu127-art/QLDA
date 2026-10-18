@@ -30,4 +30,9 @@ router.post("/bangcong-thang/generate-draft", timesheetController.generateDraftT
 router.post("/timesheet/generate-draft", timesheetController.generateDraftTimesheet);
 router.get("/bangcong-thang/draft", timesheetController.getDraftTimesheet);
 
+// NÚT [GỬI ĐỐI SOÁT]: ĐẨY THÔNG BÁO VÀ LINK XEM BẢNG CÔNG NHÁP ĐẾN TỪNG NHÂN VIÊN
+router.post("/bangcong-thang/send-for-review", timesheetController.sendTimesheetForReview);
+router.post("/bangcong-thang/send-to-employees", timesheetController.sendTimesheetForReview);
+
 module.exports = router;
+
