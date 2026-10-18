@@ -49,6 +49,9 @@ app.use("/api", shiftRoutes);
 const notificationRoutes = require("./routes/notificationRoutes");
 app.use("/api", notificationRoutes);
 
+const orderRoutes = require("./routes/orderRoutes");
+app.use("/api", orderRoutes);
+
 // Khởi chạy tiến trình chạy ngầm tổng hợp Bảng công nháp ngày cuối tháng
 const { startMonthlyTimesheetJob } = require("./jobs/monthlyTimesheetJob");
 startMonthlyTimesheetJob();
