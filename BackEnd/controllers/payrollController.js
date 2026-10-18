@@ -355,6 +355,57 @@ exports.getPayrollList = async (req, res) => {
   }
 };
 
+// Helper: Hook gửi thông báo phiếu lương hàng loạt đến từng nhân viên tương ứng
+async function sendBulkPayrollNotifications(thang, nam, io) {
+  try {
+    const [records] = await db.query(
+      `SELECT bl.MaBangLuong, bl.MaNhanVien, bl.TongLuong, bl.Thang, bl.Nam, nv.HoTen, nv.LoaiNhanVien
+       FROM bangluong bl
+       JOIN nhanvien nv ON bl.MaNhanVien = nv.MaNhanVien
+       WHERE bl.Thang = ? AND bl.Nam = ?`,
+      [thang, nam]
+    );
+
+    let sentCount = 0;
+    for (const item of records) {
+      const tieuDe = `🎉 Ting ting! Phiếu lương tháng này của bạn đã có`;
+      const noiDung = `Chào ${item.HoTen}, Admin đã duyệt bảng lương tháng ${thang}/${nam}. Số tiền thực lĩnh của bạn là ${Number(item.TongLuong).toLocaleString("vi-VN")}đ. Vui lòng bấm vào đây để xem chi tiết Phiếu lương (QH-59).`;
+      const link = `#my_payslip?thang=${thang}&nam=${nam}`;
+
+      // Lưu thông báo vào CSDL
+      const [insertRes] = await db.query(
+        `INSERT INTO thongbao (TieuDe, NoiDung, Loai, MaNhanVien, Link, DaXem, NgayTao)
+         VALUES (?, ?, 'payslip', ?, ?, 0, NOW())`,
+        [tieuDe, noiDung, item.MaNhanVien, link]
+      );
+
+      // Bắn sự kiện realtime qua Socket.IO đến client
+      if (io) {
+        io.emit("new_notification", {
+          maTB: insertRes.insertId,
+          maNhanVien: item.MaNhanVien,
+          hoTen: item.HoTen,
+          tieuDe,
+          noiDung,
+          link,
+          loai: "payslip",
+          thang,
+          nam,
+          tongLuong: item.TongLuong,
+          ngayTao: new Date(),
+        });
+      }
+      sentCount++;
+    }
+    return sentCount;
+  } catch (err) {
+    console.error("Lỗi sendBulkPayrollNotifications hook:", err);
+    return 0;
+  }
+}
+
+exports.sendBulkPayrollNotifications = sendBulkPayrollNotifications;
+
 // 3. [PUT] /api/bangluong/:id/approve - ADMIN PHÊ DUYỆT / XÁC NHẬN CHI TRẢ LƯƠNG
 exports.approvePayrollItem = async (req, res) => {
   try {
@@ -373,16 +424,55 @@ exports.approvePayrollItem = async (req, res) => {
       return res.status(404).json({ success: false, message: "Không tìm thấy bản ghi lương!" });
     }
 
+    // Gửi thông báo cho nhân viên nếu duyệt
+    if (trangThai === "Đã duyệt" || trangThai === "Đã thanh toán") {
+      const [itemRows] = await db.query(
+        `SELECT bl.MaBangLuong, bl.MaNhanVien, bl.TongLuong, bl.Thang, bl.Nam, nv.HoTen 
+         FROM bangluong bl 
+         JOIN nhanvien nv ON bl.MaNhanVien = nv.MaNhanVien 
+         WHERE bl.MaBangLuong = ?`,
+        [id]
+      );
+      if (itemRows.length > 0) {
+        const item = itemRows[0];
+        const io = req.app?.get("io");
+        const tieuDe = `🎉 Ting ting! Phiếu lương tháng này của bạn đã có`;
+        const noiDung = `Chào ${item.HoTen}, Admin đã duyệt phiếu lương tháng ${item.Thang}/${item.Nam}. Số tiền thực lĩnh của bạn là ${Number(item.TongLuong).toLocaleString("vi-VN")}đ. Bấm vào đây để xem chi tiết Phiếu lương!`;
+        const link = `#my_payslip?thang=${item.Thang}&nam=${item.Nam}`;
+
+        const [ins] = await db.query(
+          `INSERT INTO thongbao (TieuDe, NoiDung, Loai, MaNhanVien, Link, DaXem, NgayTao)
+           VALUES (?, ?, 'payslip', ?, ?, 0, NOW())`,
+          [tieuDe, noiDung, item.MaNhanVien, link]
+        );
+
+        if (io) {
+          io.emit("new_notification", {
+            maTB: ins.insertId,
+            maNhanVien: item.MaNhanVien,
+            tieuDe,
+            noiDung,
+            link,
+            loai: "payslip",
+            thang: item.Thang,
+            nam: item.Nam,
+            tongLuong: item.TongLuong,
+            ngayTao: new Date(),
+          });
+        }
+      }
+    }
+
     return res.json({
       success: true,
-      message: `Đã cập nhật trạng thái phiếu lương thành [${trangThai}]!`,
+      message: `Đã cập nhật trạng thái phiếu lương thành [${trangThai}] và gửi thông báo đến nhân viên!`,
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// 4. [POST] /api/bangluong/approve-all - ADMIN DUYỆT TOÀN BỘ BẢNG LƯƠNG THÁNG
+// 4. [POST] /api/bangluong/approve-all - ADMIN DUYỆT TOÀN BỘ BẢNG LƯƠNG THÁNG & KÍCH HOẠT HOOK THÔNG BÁO HÀNG LOẠT
 exports.approveAllPayroll = async (req, res) => {
   try {
     const { thang, nam } = req.body;
@@ -393,15 +483,22 @@ exports.approveAllPayroll = async (req, res) => {
     const [result] = await db.query(
       `UPDATE bangluong 
        SET TrangThai = 'Đã duyệt'
-       WHERE Thang = ? AND Nam = ? AND TrangThai = 'Chờ duyệt'`,
+       WHERE Thang = ? AND Nam = ?`,
       [thang, nam]
     );
 
+    // Kích hoạt luồng (Hook) gửi thông báo hàng loạt đến từng nhân viên
+    const io = req.app?.get("io");
+    const notifCount = await sendBulkPayrollNotifications(thang, nam, io);
+
     return res.json({
       success: true,
-      message: `Đã phê duyệt bảng lương tháng ${thang}/${nam} cho ${result.affectedRows} nhân viên!`,
+      message: `🎉 Đã phê duyệt toàn bộ bảng lương tháng ${thang}/${nam}! Hệ thống đã kích hoạt Hook gửi thông báo hàng loạt ("Ting ting! Phiếu lương tháng này của bạn đã có") đến ${notifCount} nhân viên.`,
+      approvedCount: result.affectedRows,
+      notifCount,
     });
   } catch (error) {
+    console.error("Lỗi approveAllPayroll:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

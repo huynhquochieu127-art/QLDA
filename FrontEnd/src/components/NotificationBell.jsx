@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Bell, Check, ExternalLink, Calendar, Info, X } from "lucide-react";
+import {
+  Bell,
+  Check,
+  ExternalLink,
+  Calendar,
+  Info,
+  X,
+  Receipt,
+  DollarSign,
+  Sparkles,
+} from "lucide-react";
 import { io } from "socket.io-client";
 import { API_BASE } from "../utils/staffWork";
 
@@ -8,7 +18,7 @@ export default function NotificationBell({ currentUser, onNavigateTab }) {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [toastNotif, setToastNotif] = useState(null); // Popup Ting ting khi vừa có lương
   const dropdownRef = useRef(null);
 
   const empId =
@@ -16,6 +26,40 @@ export default function NotificationBell({ currentUser, onNavigateTab }) {
     currentUser?.id ||
     currentUser?.staffId ||
     null;
+
+  // Hiệu ứng âm thanh "Ting ting" chuẩn bằng Web Audio API
+  const playTingTingSound = () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const now = audioCtx.currentTime;
+
+      // Nốt thứ nhất (880Hz - A5)
+      const osc1 = audioCtx.createOscillator();
+      const gain1 = audioCtx.createGain();
+      osc1.type = "sine";
+      osc1.frequency.setValueAtTime(880, now);
+      gain1.gain.setValueAtTime(0.12, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      osc1.connect(gain1);
+      gain1.connect(audioCtx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.25);
+
+      // Nốt thứ hai cao hơn (1320Hz - E6) tạo tiếng "Ting!" tươi vui
+      const osc2 = audioCtx.createOscillator();
+      const gain2 = audioCtx.createGain();
+      osc2.type = "sine";
+      osc2.frequency.setValueAtTime(1320, now + 0.1);
+      gain2.gain.setValueAtTime(0.18, now + 0.1);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      osc2.connect(gain2);
+      gain2.connect(audioCtx.destination);
+      osc2.start(now + 0.1);
+      osc2.stop(now + 0.45);
+    } catch (e) {
+      // Bỏ qua nếu browser chặn autoplay âm thanh khi chưa click
+    }
+  };
 
   // 1. Tải danh sách thông báo của nhân viên
   const fetchNotifications = async () => {
@@ -48,19 +92,27 @@ export default function NotificationBell({ currentUser, onNavigateTab }) {
       socket.on("new_notification", (notif) => {
         // Kiểm tra xem thông báo này có dành cho nhân viên này không
         if (!notif.maNhanVien || String(notif.maNhanVien) === String(empId)) {
-          setNotifications((prev) => [
-            {
-              MaTB: notif.maTB || Date.now(),
-              TieuDe: notif.tieuDe,
-              NoiDung: notif.noiDung,
-              Loai: notif.loai,
-              Link: notif.link,
-              DaXem: 0,
-              NgayTao: notif.ngayTao || new Date(),
-            },
-            ...prev,
-          ]);
+          const newObj = {
+            MaTB: notif.maTB || Date.now(),
+            TieuDe: notif.tieuDe,
+            NoiDung: notif.noiDung,
+            Loai: notif.loai,
+            Link: notif.link,
+            DaXem: 0,
+            NgayTao: notif.ngayTao || new Date(),
+          };
+
+          setNotifications((prev) => [newObj, ...prev]);
           setUnreadCount((c) => c + 1);
+
+          // Phát âm thanh Ting ting & hiển thị popup thông báo
+          playTingTingSound();
+          setToastNotif(newObj);
+
+          // Tự đóng toast sau 8 giây
+          setTimeout(() => {
+            setToastNotif((cur) => (cur?.MaTB === newObj.MaTB ? null : cur));
+          }, 8000);
         }
       });
     } catch (e) {
@@ -110,17 +162,21 @@ export default function NotificationBell({ currentUser, onNavigateTab }) {
     }
   };
 
-  // Khi click vào link xem chi tiết Bảng công nháp
+  // Khi click vào link xem chi tiết (Bảng công hoặc Phiếu lương)
   const handleOpenDetailLink = (notif) => {
     handleMarkAsRead(notif);
     setIsOpen(false);
+    setToastNotif(null);
 
-    if (notif.Link && notif.Link.includes("my_timesheet")) {
-      if (onNavigateTab) {
-        onNavigateTab("my_timesheet");
-      }
-    } else if (onNavigateTab) {
-      onNavigateTab("my_timesheet");
+    const isPayslip =
+      notif.Loai === "payslip" ||
+      (notif.Link && notif.Link.includes("my_payslip")) ||
+      (notif.TieuDe && notif.TieuDe.toLowerCase().includes("phiếu lương"));
+
+    if (isPayslip) {
+      if (onNavigateTab) onNavigateTab("my_payslip");
+    } else {
+      if (onNavigateTab) onNavigateTab("my_timesheet");
     }
   };
 
@@ -139,7 +195,84 @@ export default function NotificationBell({ currentUser, onNavigateTab }) {
 
   return (
     <div style={{ position: "relative" }} ref={dropdownRef}>
-      {/* Nút Chuông thông báo */}
+      {/* 1. TOAST POPUP NOTIFICATION TING TING KHI NHẬN ĐƯỢC PHIẾU LƯƠNG */}
+      {toastNotif && (
+        <div
+          style={{
+            position: "fixed",
+            top: "20px",
+            right: "20px",
+            zIndex: 99999,
+            backgroundColor: "#ffffff",
+            borderRadius: "12px",
+            padding: "16px 20px",
+            boxShadow:
+              "0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08)",
+            border: "2px solid #22c55e",
+            maxWidth: "380px",
+            animation: "slideInRight 0.3s ease-out",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: "50%",
+                  backgroundColor: "#dcfce7",
+                  color: "#16a34a",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Receipt size={22} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: "14px", color: "#15803d" }}>
+                  {toastNotif.TieuDe}
+                </div>
+                <div style={{ fontSize: "12px", color: "#475569", marginTop: 2 }}>
+                  {toastNotif.NoiDung}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setToastNotif(null)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8" }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button
+              onClick={() => handleOpenDetailLink(toastNotif)}
+              style={{
+                backgroundColor: "#16a34a",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "6px",
+                padding: "6px 14px",
+                fontSize: "12px",
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                boxShadow: "0 2px 6px rgba(22, 163, 74, 0.3)",
+              }}
+            >
+              <span>Xem Phiếu Lương Ngay</span>
+              <ExternalLink size={13} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 2. NÚT CHUÔNG THÔNG BÁO TRÊN HEADER */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
@@ -185,15 +318,15 @@ export default function NotificationBell({ currentUser, onNavigateTab }) {
         )}
       </button>
 
-      {/* Dropdown Menu Danh Sách Thông Báo */}
+      {/* 3. DROPDOWN MENU DANH SÁCH THÔNG BÁO */}
       {isOpen && (
         <div
           style={{
             position: "absolute",
             top: "48px",
             right: 0,
-            width: "380px",
-            maxWidth: "90vw",
+            width: "390px",
+            maxWidth: "92vw",
             backgroundColor: "#ffffff",
             borderRadius: "12px",
             boxShadow:
@@ -277,6 +410,10 @@ export default function NotificationBell({ currentUser, onNavigateTab }) {
               </div>
             ) : (
               notifications.map((notif) => {
+                const isPayslip =
+                  notif.Loai === "payslip" ||
+                  (notif.Link && notif.Link.includes("my_payslip")) ||
+                  (notif.TieuDe && notif.TieuDe.toLowerCase().includes("phiếu lương"));
                 const isTimesheet = notif.Loai === "timesheet_review";
                 const isUnread = !notif.DaXem;
 
@@ -286,7 +423,11 @@ export default function NotificationBell({ currentUser, onNavigateTab }) {
                     style={{
                       padding: "12px 16px",
                       borderBottom: "1px solid #f1f5f9",
-                      backgroundColor: isUnread ? "#f0f9ff" : "#ffffff",
+                      backgroundColor: isUnread
+                        ? isPayslip
+                          ? "#f0fdf4"
+                          : "#f0f9ff"
+                        : "#ffffff",
                       transition: "background 0.15s",
                       cursor: "default",
                     }}
@@ -300,14 +441,22 @@ export default function NotificationBell({ currentUser, onNavigateTab }) {
                     >
                       <div
                         style={{
-                          backgroundColor: isTimesheet ? "#e0f2fe" : "#f1f5f9",
-                          color: isTimesheet ? "#0284c7" : "#64748b",
-                          padding: "6px",
+                          backgroundColor: isPayslip
+                            ? "#dcfce7"
+                            : isTimesheet
+                            ? "#e0f2fe"
+                            : "#f1f5f9",
+                          color: isPayslip
+                            ? "#15803d"
+                            : isTimesheet
+                            ? "#0284c7"
+                            : "#64748b",
+                          padding: "7px",
                           borderRadius: "8px",
                           marginTop: "2px",
                         }}
                       >
-                        <Calendar size={16} />
+                        {isPayslip ? <Receipt size={17} /> : <Calendar size={16} />}
                       </div>
 
                       <div style={{ flex: 1 }}>
@@ -315,7 +464,11 @@ export default function NotificationBell({ currentUser, onNavigateTab }) {
                           style={{
                             fontWeight: isUnread ? 700 : 600,
                             fontSize: "13px",
-                            color: isUnread ? "#0369a1" : "#1e293b",
+                            color: isPayslip
+                              ? "#15803d"
+                              : isUnread
+                              ? "#0369a1"
+                              : "#1e293b",
                             marginBottom: "4px",
                           }}
                         >
@@ -332,7 +485,7 @@ export default function NotificationBell({ currentUser, onNavigateTab }) {
                           {notif.NoiDung}
                         </div>
 
-                        {/* Nút / Link xem chi tiết Bảng công nháp */}
+                        {/* Nút / Link xem chi tiết */}
                         {notif.Link && (
                           <button
                             onClick={() => handleOpenDetailLink(notif)}
@@ -340,19 +493,25 @@ export default function NotificationBell({ currentUser, onNavigateTab }) {
                               display: "inline-flex",
                               alignItems: "center",
                               gap: "5px",
-                              backgroundColor: "#0284c7",
+                              backgroundColor: isPayslip ? "#16a34a" : "#0284c7",
                               color: "#ffffff",
                               border: "none",
                               borderRadius: "6px",
-                              padding: "5px 10px",
+                              padding: "5px 12px",
                               fontSize: "12px",
-                              fontWeight: 600,
+                              fontWeight: 700,
                               cursor: "pointer",
                               transition: "all 0.15s",
-                              boxShadow: "0 1px 2px rgba(2, 132, 199, 0.2)",
+                              boxShadow: isPayslip
+                                ? "0 1px 3px rgba(22, 163, 74, 0.3)"
+                                : "0 1px 2px rgba(2, 132, 199, 0.2)",
                             }}
                           >
-                            <span>👉 Xem chi tiết Bảng công nháp</span>
+                            <span>
+                              {isPayslip
+                                ? "👉 Xem chi tiết Phiếu lương (QH-59)"
+                                : "👉 Xem chi tiết Bảng công nháp"}
+                            </span>
                             <ExternalLink size={12} />
                           </button>
                         )}
