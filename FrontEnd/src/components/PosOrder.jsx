@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import "../../css/pos.css";
 import PosSuggestions from "./PosSuggestions";
+import PosDiscountCode from "./PosDiscountCode";
 
 const CATEGORIES = [
   { id: "all", name: "Tất cả" },
@@ -125,6 +126,9 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
   const [customerCash, setCustomerCash] = useState("");
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [lastReceipt, setLastReceipt] = useState(null);
+
+  // Mã giảm giá đã áp dụng cho đơn hiện tại (QH-89)
+  const [appliedDiscount, setAppliedDiscount] = useState(null);
 
   const dropdownRef = useRef(null);
 
@@ -263,11 +267,27 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
     setCart((prevCart) => prevCart.filter((item) => item.id !== id));
   };
 
-  // Tính tổng tiền
-  const totalAmount = cart.reduce(
+  // Tính tổng tiền: Tạm tính - Giảm giá = Tổng cộng (QH-89)
+  const subtotal = cart.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0,
   );
+  const discountAmount = appliedDiscount
+    ? Math.min(appliedDiscount.amount, subtotal)
+    : 0;
+  const totalAmount = Math.max(0, subtotal - discountAmount);
+
+  // Gỡ mã giảm giá (nhắc lại nếu mã đã dùng điểm của khách)
+  const handleRemoveDiscount = () => {
+    if (
+      appliedDiscount?.pointsUsed > 0 &&
+      !window.confirm(
+        `Gỡ mã ${appliedDiscount.code}? Mã này đã dùng ${appliedDiscount.pointsUsed} điểm của khách.`,
+      )
+    )
+      return;
+    setAppliedDiscount(null);
+  };
 
   // Xử lý mở Modal Thanh toán (QH-79)
   const handleOpenPayment = () => {
@@ -319,6 +339,10 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
       table: selectedTable,
       customer: selectedCustomer,
       items: [...cart],
+      subtotal,
+      discount: appliedDiscount
+        ? { code: appliedDiscount.code, amount: discountAmount }
+        : null,
       totalAmount,
       paymentMethod,
       customerCash:
@@ -360,7 +384,10 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
             soLuong: item.quantity,
             donGia: item.price,
           })),
-          tongTien: totalAmount,
+          tongTien: subtotal,
+          giamGia: discountAmount,
+          thanhTien: totalAmount,
+          maGiamGia: appliedDiscount ? appliedDiscount.code : null,
           tienKhachDua:
             paymentMethod === "CASH" ? numericCustomerCash : totalAmount,
           phuongThucTT:
@@ -390,6 +417,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
     setShowPaymentModal(false);
     setShowReceiptModal(true);
     setCart([]);
+    setAppliedDiscount(null);
     handleClearCustomer();
   };
 
@@ -596,6 +624,17 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
           )}
         </div>
 
+        {/* Mã giảm giá (QH-89) */}
+        {cart.length > 0 && (
+          <PosDiscountCode
+            subtotal={subtotal}
+            customer={selectedCustomer}
+            applied={appliedDiscount}
+            onApply={setAppliedDiscount}
+            onRemove={handleRemoveDiscount}
+          />
+        )}
+
         {/* Món gọi kèm gợi ý từ AI (QH-95) */}
         <PosSuggestions cart={cart} products={PRODUCTS} onAdd={addToCart} />
 
@@ -603,8 +642,14 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
         <div className="sidebar-footer">
           <div className="summary-row">
             <span>Tạm tính</span>
-            <span>{totalAmount.toLocaleString("vi-VN")} đ</span>
+            <span>{subtotal.toLocaleString("vi-VN")} đ</span>
           </div>
+          {discountAmount > 0 && (
+            <div className="summary-row discount">
+              <span>Giảm giá ({appliedDiscount.code})</span>
+              <span>- {discountAmount.toLocaleString("vi-VN")} đ</span>
+            </div>
+          )}
           <div className="summary-row total">
             <span>Tổng cộng</span>
             <span>{totalAmount.toLocaleString("vi-VN")} đ</span>
@@ -938,6 +983,15 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
                     : "Chuyển khoản QR"}
                 </span>
               </div>
+
+              {lastReceipt.discount && (
+                <div className="receipt-row">
+                  <span>Giảm giá ({lastReceipt.discount.code})</span>
+                  <span>
+                    - {lastReceipt.discount.amount.toLocaleString("vi-VN")} đ
+                  </span>
+                </div>
+              )}
 
               <div className="receipt-row highlight">
                 <span>Tổng cộng</span>
