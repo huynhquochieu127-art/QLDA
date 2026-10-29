@@ -210,48 +210,6 @@ function Login() {
           >
             {loading ? "Đang xử lý..." : "Đăng Nhập"}
           </button>
-
-          {/* CHẾ ĐỘ THỬ NGHIỆM BYPASS DEMO */}
-          <div className="pt-3 border-top text-center">
-            <p className="text-muted small mb-2"></p>
-            <div className="d-flex flex-wrap gap-1 justify-content-center">
-              <button
-                type="button"
-                className="btn btn-outline-primary btn-sm flex-fill"
-                onClick={() => handleBypassLogin("admin")}
-              >
-                Admin
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline-info btn-sm flex-fill"
-                onClick={() => handleBypassLogin("manager")}
-              >
-                Quản lý
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline-success btn-sm flex-fill"
-                onClick={() => handleBypassLogin("cashier")}
-              >
-                Thu ngân
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline-warning btn-sm flex-fill"
-                onClick={() => handleBypassLogin("barista")}
-              >
-                Pha chế
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline-secondary btn-sm flex-fill"
-                onClick={() => handleBypassLogin("waiter")}
-              >
-                Phục vụ
-              </button>
-            </div>
-          </div>
         </form>
 
         <div className="login-footer"></div>

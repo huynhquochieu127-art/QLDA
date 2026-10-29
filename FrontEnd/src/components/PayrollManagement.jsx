@@ -53,13 +53,14 @@ export default function PayrollManagement() {
 
   // ADMIN BẮT ĐẦU CHẠY TÍNH LƯƠNG
   // Nghiệp vụ: API chỉ bắt đầu chạy khi nhận được tín hiệu "Đã chốt sổ" từ QH-55 đẩy sang
-  const handleCalculatePayroll = async () => {
+  const handleCalculatePayroll = async (forceOption = false) => {
     setCalculating(true);
     setMessage(null);
     try {
       const res = await axios.post(`${API_BASE}/bangluong/calculate`, {
         thang: selectedMonth,
         nam: selectedYear,
+        force: forceOption,
       });
 
       setMessage({ type: "success", text: res.data.message });
@@ -274,6 +275,24 @@ export default function PayrollManagement() {
             <DollarSign size={16} />
             {calculating ? "Đang chạy tính toán..." : "Chạy Tính Lương Tự Động"}
           </button>
+
+          {!isLocked && (
+            <button
+              onClick={() => handleCalculatePayroll(true)}
+              disabled={calculating}
+              style={{
+                ...btnSecondaryStyle,
+                padding: "12px 16px",
+                fontSize: "13px",
+                color: "#d97706",
+                borderColor: "#fde68a",
+                backgroundColor: "#fffbeb",
+              }}
+              title="Tính toán thử nghiệm ngay mà không cần đợi Quản lý chốt sổ"
+            >
+              ⚡ Tính Thử Nghiệm (Force)
+            </button>
+          )}
 
           {payrolls.length > 0 && (
             <button onClick={handleApproveAll} style={{ ...btnSecondaryStyle, backgroundColor: "#eff6ff", borderColor: "#bfdbfe", color: "#2563eb", padding: "12px 16px" }}>

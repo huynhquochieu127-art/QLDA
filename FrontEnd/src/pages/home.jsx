@@ -61,7 +61,14 @@ export default function Home() {
     ? JSON.parse(userStr)
     : { name: "Nguyễn Hải Hậu", role: "Admin" };
 
-  const rawRole = (user.role || user.MaVaiTro || "cashier")
+  const rawRole = (
+    user.chucVu ||
+    user.ChucVu ||
+    user.position ||
+    user.role ||
+    user.TenVaiTro ||
+    ""
+  )
     .toString()
     .toLowerCase();
 
@@ -86,6 +93,11 @@ export default function Home() {
     rawRole === "4"
   ) {
     currentRole = "waiter";
+  } else if (
+    rawRole.includes("thu ngân") ||
+    rawRole.includes("cashier")
+  ) {
+    currentRole = "cashier";
   }
 
   // 2. XÁC ĐỊNH LOẠI HỢP ĐỒNG: FULL-TIME HAY PART-TIME
@@ -213,7 +225,7 @@ export default function Home() {
       id: "my_payslip",
       label: "Phiếu lương",
       icon: <Receipt size={18} />,
-      roles: ["manager", "cashier", "barista", "waiter"],
+      roles: ["admin", "manager", "cashier", "barista", "waiter"],
     },
     {
       id: "timekeeping",
