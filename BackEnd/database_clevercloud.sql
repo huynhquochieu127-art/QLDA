@@ -182,6 +182,7 @@ CREATE TABLE `sanpham` (
   `MoTa` varchar(500) DEFAULT NULL,
   `HinhAnh` varchar(500) DEFAULT NULL,
   `CoBan` tinyint DEFAULT 1,
+  `is_active` tinyint DEFAULT 1,
   `MaDanhMuc` int DEFAULT NULL,
   PRIMARY KEY (`MaSanPham`),
   KEY `idx_sanpham_danhmuc` (`MaDanhMuc`),
