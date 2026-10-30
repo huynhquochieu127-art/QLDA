@@ -8,7 +8,8 @@ const db = mysql.createPool({
   password: process.env.DB_PASSWORD || "12345",
   database: process.env.DB_NAME || "dacnpm",
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 3,
+  queueLimit: 0,
 });
 
 module.exports = db;

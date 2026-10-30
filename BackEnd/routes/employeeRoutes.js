@@ -23,6 +23,28 @@ router.patch("/employees/:id/salary", employeeController.updateEmployeeSalary);
 // [DELETE] Xóa nhân viên
 router.delete("/employees/:id", employeeController.deleteEmployee);
 
+const multer = require("multer");
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+});
+
+// [GET] Tải file mẫu template Excel (.xlsx)
+router.get("/employees/template", employeeController.downloadEmployeeTemplate);
+router.get("/users/template", employeeController.downloadEmployeeTemplate);
+
+// [POST] Upload và đọc file Excel để bóc tách & insert vào CSDL
+router.post(
+  "/employees/import",
+  upload.single("file"),
+  employeeController.importEmployeesFromExcel
+);
+router.post(
+  "/users/import",
+  upload.single("file"),
+  employeeController.importEmployeesFromExcel
+);
+
 // [GET] Danh sách vai trò
 router.get("/roles", employeeController.getRoles);
 
