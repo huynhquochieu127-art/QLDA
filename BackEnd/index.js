@@ -56,6 +56,10 @@ app.use("/api", orderRoutes);
 const discountRoutes = require("./routes/discountRoutes");
 app.use("/api", discountRoutes);
 
+const revenueRoutes = require("./routes/revenueRoutes");
+app.use("/api/reports", revenueRoutes);
+
+
 // Khởi chạy tiến trình chạy ngầm tổng hợp Bảng công nháp ngày cuối tháng
 const { startMonthlyTimesheetJob } = require("./jobs/monthlyTimesheetJob");
 startMonthlyTimesheetJob();
