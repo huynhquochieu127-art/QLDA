@@ -52,6 +52,9 @@ app.use("/api", notificationRoutes);
 const orderRoutes = require("./routes/orderRoutes");
 app.use("/api", orderRoutes);
 
+const discountRoutes = require("./routes/discountRoutes");
+app.use("/api", discountRoutes);
+
 // Khởi chạy tiến trình chạy ngầm tổng hợp Bảng công nháp ngày cuối tháng
 const { startMonthlyTimesheetJob } = require("./jobs/monthlyTimesheetJob");
 startMonthlyTimesheetJob();
@@ -59,14 +62,18 @@ startMonthlyTimesheetJob();
 // Lấy Secret Key từ .env hoặc fallback
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_key";
 
-// Kết nối MySQL Database
+// Kết nối MySQL Database (Tối ưu connection pool cho Clever Cloud max 5 connections)
 const db = mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "12345", // Hardcode 12345 để dự phòng nếu .env lỗi
-  database: process.env.DB_NAME || "dacnpm", // Hardcode dacnpm để dự phòng
+  password: process.env.DB_PASSWORD || "12345",
+  database: process.env.DB_NAME || "dacnpm",
+  port: parseInt(process.env.DB_PORT || "3306", 10),
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 2,
+  maxIdle: 1,
+  idleTimeout: 10000,
+  queueLimit: 0,
 });
 
 const employeeController = require("./controllers/employeeController");

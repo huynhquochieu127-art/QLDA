@@ -26,8 +26,10 @@ import PartTimeShiftConfig from "../components/PartTimeShiftConfig";
 import FullTimeShiftConfig from "../components/FullTimeShiftConfig";
 import FullTimeShiftRegistration from "../components/FullTimeShiftRegistration";
 import NotificationBell from "../components/NotificationBell";
+import DiscountManagement from "../components/DiscountManagement";
 import {
   Clock,
+  Tag,
   User,
   LogOut,
   Coffee,
@@ -182,6 +184,12 @@ export default function Home() {
       label: "Quản lý Đồ Uống & Thực Đơn",
       icon: <Package size={18} />,
       roles: ["admin", "manager", "barista"],
+    },
+    {
+      id: "discounts",
+      label: "Chiến dịch Mã giảm giá",
+      icon: <Tag size={18} />,
+      roles: ["admin", "manager"],
     },
     {
       id: "my_checkin",
@@ -374,6 +382,10 @@ export default function Home() {
 
           {activeTab === "inventory" && (
             <ProductManagement currentRole={currentRole} />
+          )}
+
+          {activeTab === "discounts" && (
+            <DiscountManagement currentRole={currentRole} />
           )}
 
           {activeTab === "customers" && (

@@ -126,6 +126,12 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [lastReceipt, setLastReceipt] = useState(null);
 
+  // State Mã giảm giá & Ràng buộc mốc điểm
+  const [appliedDiscount, setAppliedDiscount] = useState(null);
+  const [discountInput, setDiscountInput] = useState("");
+  const [discountError, setDiscountError] = useState("");
+  const [validatingDiscount, setValidatingDiscount] = useState(false);
+
   const dropdownRef = useRef(null);
 
   // Tự động đóng dropdown khi click ra ngoài
@@ -139,7 +145,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Debounce tìm kiếm khách hàng khi nhập từ 3 ký tự trở lên
+  // Debounce tìm kiếm khách hàng khi nhập từ 3 ký tự trở lên (Lấy điểm thực tế từ Database)
   useEffect(() => {
     if (selectedCustomer) return;
 
@@ -149,7 +155,20 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
       setIsSearching(true);
       setShowDropdown(true);
 
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
+        try {
+          const res = await fetch(`http://localhost:5000/api/customers?search=${cleanPhone}&limit=10`);
+          if (res.ok) {
+            const json = await res.json();
+            const list = json.data || (Array.isArray(json) ? json : []);
+            if (list.length > 0) {
+              setCustomerSuggestions(list);
+              setIsSearching(false);
+              return;
+            }
+          }
+        } catch (_) {}
+
         const results = MOCK_CUSTOMERS.filter((c) =>
           c.phone.includes(cleanPhone),
         );
@@ -263,11 +282,63 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
     setCart((prevCart) => prevCart.filter((item) => item.id !== id));
   };
 
-  // Tính tổng tiền
-  const totalAmount = cart.reduce(
+  // Tính tổng tiền & giảm giá
+  const subtotal = cart.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0,
   );
+  const discountAmount = appliedDiscount
+    ? Math.min(appliedDiscount.discountAmount, subtotal)
+    : 0;
+  const totalAmount = Math.max(0, subtotal - discountAmount);
+
+  // Áp dụng mã giảm giá (Kiểm tra mốc điểm tại Backend)
+  const handleApplyDiscount = async (e) => {
+    if (e) e.preventDefault();
+    if (!discountInput.trim()) {
+      setDiscountError("Vui lòng nhập mã giảm giá!");
+      return;
+    }
+    if (cart.length === 0) {
+      setDiscountError("Giỏ hàng đang trống! Vui lòng chọn món trước.");
+      return;
+    }
+
+    setValidatingDiscount(true);
+    setDiscountError("");
+
+    try {
+      const res = await fetch("http://localhost:5000/api/discounts/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          maCode: discountInput.trim(),
+          subtotal: subtotal,
+          customerPoints: selectedCustomer ? (selectedCustomer.points || 0) : 0,
+          customerId: selectedCustomer ? selectedCustomer.id : null,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setDiscountError(data.message || "Không thể áp dụng mã giảm giá này!");
+        return;
+      }
+
+      setAppliedDiscount(data.discount);
+      setDiscountInput("");
+      setDiscountError("");
+    } catch (err) {
+      setDiscountError("Lỗi kết nối máy chủ khi kiểm tra mã!");
+    } finally {
+      setValidatingDiscount(false);
+    }
+  };
+
+  const handleRemoveDiscount = () => {
+    setAppliedDiscount(null);
+    setDiscountError("");
+  };
 
   // Xử lý mở Modal Thanh toán (QH-79)
   const handleOpenPayment = () => {
@@ -496,18 +567,33 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
             ) : null}
           </div>
 
-          {/* Đã chọn khách hàng */}
+          {/* Đã chọn khách hàng (Hiển thị điểm tích lũy) */}
           {selectedCustomer && (
-            <div className="selected-customer-card">
-              <div>
-                <strong>{selectedCustomer.name}</strong> -{" "}
-                {selectedCustomer.phone}
-                {selectedCustomer.dob && (
-                  <span className="customer-dob">
-                    {" "}
-                    (NS: {selectedCustomer.dob})
-                  </span>
-                )}
+            <div className="selected-customer-card" style={{ padding: "10px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0", marginBottom: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <strong>{selectedCustomer.name}</strong> - {selectedCustomer.phone}
+                  {selectedCustomer.dob && (
+                    <span className="customer-dob"> (NS: {selectedCustomer.dob})</span>
+                  )}
+                </div>
+                <div
+                  title="Điểm tích lũy hiện tại của khách hàng"
+                  style={{
+                    background: "#fef3c7",
+                    color: "#92400e",
+                    padding: "3px 8px",
+                    borderRadius: "12px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    border: "1px solid #fcd34d",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  ⭐ {selectedCustomer.points || 0} điểm
+                </div>
               </div>
             </div>
           )}
@@ -599,12 +685,96 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
         {/* Món gọi kèm gợi ý từ AI (QH-95) */}
         <PosSuggestions cart={cart} products={PRODUCTS} onAdd={addToCart} />
 
+        {/* Khu vực Nhập mã giảm giá & Ràng buộc Mốc điểm */}
+        <div style={{ padding: "12px", background: "#f8fafc", borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", margin: "10px 0", borderRadius: "8px" }}>
+          <div style={{ fontSize: "12px", fontWeight: 700, color: "#475569", marginBottom: "6px" }}>
+            🎟️ Mã Giảm Giá / Khuyến Mãi
+          </div>
+
+          {appliedDiscount ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "6px" }}>
+              <div>
+                <strong style={{ color: "#166534" }}>{appliedDiscount.code}</strong>: -{appliedDiscount.discountAmount.toLocaleString("vi-VN")} đ
+                {appliedDiscount.minPoints > 0 && (
+                  <span style={{ fontSize: "11px", color: "#15803d", marginLeft: "6px" }}>
+                    (Yêu cầu: {appliedDiscount.minPoints}đ - Đủ ĐK)
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleRemoveDiscount}
+                style={{ background: "none", border: "none", color: "#b91c1c", fontWeight: 700, cursor: "pointer", fontSize: "16px" }}
+                title="Gỡ mã giảm giá"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: "6px" }}>
+              <input
+                type="text"
+                placeholder="Nhập mã (VD: GIAM10%, TRU20K)..."
+                value={discountInput}
+                onChange={(e) => {
+                  setDiscountInput(e.target.value.toUpperCase());
+                  if (discountError) setDiscountError("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleApplyDiscount();
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  padding: "7px 10px",
+                  borderRadius: "6px",
+                  border: "1px solid #cbd5e1",
+                  fontSize: "13px",
+                  textTransform: "uppercase",
+                  fontWeight: 600,
+                }}
+              />
+              <button
+                type="button"
+                disabled={validatingDiscount}
+                onClick={handleApplyDiscount}
+                style={{
+                  padding: "7px 14px",
+                  background: "#7c3aed",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: "13px",
+                }}
+              >
+                {validatingDiscount ? "..." : "Áp dụng"}
+              </button>
+            </div>
+          )}
+
+          {discountError && (
+            <div style={{ fontSize: "12px", color: "#dc2626", marginTop: "6px", fontWeight: 500, lineHeight: 1.3 }}>
+              ⚠️ {discountError}
+            </div>
+          )}
+        </div>
+
         {/* Tổng tiền & Thanh toán */}
         <div className="sidebar-footer">
           <div className="summary-row">
             <span>Tạm tính</span>
-            <span>{totalAmount.toLocaleString("vi-VN")} đ</span>
+            <span>{subtotal.toLocaleString("vi-VN")} đ</span>
           </div>
+          {discountAmount > 0 && (
+            <div className="summary-row" style={{ color: "#16a34a", fontWeight: 600 }}>
+              <span>Giảm giá ({appliedDiscount?.code})</span>
+              <span>- {discountAmount.toLocaleString("vi-VN")} đ</span>
+            </div>
+          )}
           <div className="summary-row total">
             <span>Tổng cộng</span>
             <span>{totalAmount.toLocaleString("vi-VN")} đ</span>
