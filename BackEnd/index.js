@@ -9,6 +9,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const employeeRoutes = require("./routes/employeeRoutes");
 const leaveRequestRoutes = require("./routes/leaveRequestRoutes");
+const { ensurePointsLogTable, awardPointsOnPayment } = require("./services/pointsService");
 
 const app = express();
 const httpServer = http.createServer(app); // Tạo HTTP Server từ Express
@@ -59,6 +60,7 @@ app.use("/api", discountRoutes);
 const { startMonthlyTimesheetJob } = require("./jobs/monthlyTimesheetJob");
 startMonthlyTimesheetJob();
 
+
 // Lấy Secret Key từ .env hoặc fallback
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_key";
 
@@ -80,6 +82,9 @@ const employeeController = require("./controllers/employeeController");
 if (employeeController.ensureEmployeeSchema) {
   employeeController.ensureEmployeeSchema(db);
 }
+
+// Khởi tạo bảng lịch sử điểm tích lũy (sau khi db pool sẵn sàng)
+ensurePointsLogTable(db);
 
 // ==========================================
 // 0. API AUTH (ĐĂNG NHẬP / ĐĂNG XUẤT)
@@ -360,6 +365,49 @@ app.patch("/api/customers/:id/points", async (req, res) => {
   }
 });
 
+// [GET] Lịch sử tích điểm của 1 khách hàng
+// GET /api/customers/:id/points-history
+app.get("/api/customers/:id/points-history", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const limit = parseInt(req.query.limit) || 50;
+
+    const [rows] = await db.query(
+      `SELECT 
+         ld.MaLichSu,
+         ld.MaDonHang,
+         ld.SoDiemCong,
+         ld.SoTienQuyDoi,
+         ld.DiemTruocKhi,
+         ld.DiemSauKhi,
+         ld.GhiChu,
+         DATE_FORMAT(ld.NgayTao, '%d/%m/%Y %H:%i:%s') AS ThoiGian
+       FROM lichsu_diem ld
+       WHERE ld.MaKhachHang = ?
+       ORDER BY ld.NgayTao DESC
+       LIMIT ?`,
+      [id, limit]
+    );
+
+    const [khach] = await db.query(
+      "SELECT HoTen, DiemTichLuy FROM khachhang WHERE MaKhachHang = ?",
+      [id]
+    );
+
+    if (khach.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy khách hàng!" });
+    }
+
+    res.json({
+      khachHang: khach[0],
+      tongLuotTich: rows.length,
+      lichSu: rows,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
 // ==========================================
 // 2. API ĐƠN HÀNG (POS & PHA CHẾ)
 // ==========================================
@@ -417,16 +465,9 @@ app.post("/api/orders", async (req, res) => {
       );
     }
 
-    // 3. Tích điểm tự động cho khách hàng (10.000 VNĐ = 1 điểm)
-    if (customerId) {
-      const pointsEarned = Math.floor(totalAmount / 10000);
-      if (pointsEarned > 0) {
-        await connection.query(
-          "UPDATE khachhang SET DiemTichLuy = DiemTichLuy + ? WHERE MaKhachHang = ?",
-          [pointsEarned, customerId],
-        );
-      }
-    }
+    // 3. Không tích điểm tại đây — điểm sẽ được cộng TỰ ĐỘNG
+    //    khi đơn hàng chuyển sang trạng thái "Đã thanh toán"
+    //    (xem hook tại PATCH /api/orders/:id/status bên dưới)
 
     await connection.commit();
     res.status(201).json({ message: "Tạo đơn hàng thành công!", orderId });
@@ -439,8 +480,12 @@ app.post("/api/orders", async (req, res) => {
 });
 
 // [PATCH] Cập nhật trạng thái Vòng đời Đơn hàng (Pha chế / Thu ngân)
+// ⚡ HOOK: Khi status = "Đã thanh toán" → tự động cộng điểm tích lũy cho khách
 app.patch("/api/orders/:id/status", async (req, res) => {
+  const connection = await db.getConnection();
   try {
+    await connection.beginTransaction();
+
     const { id } = req.params;
     const { status } = req.body;
 
@@ -453,26 +498,63 @@ app.patch("/api/orders/:id/status", async (req, res) => {
     ];
 
     if (!validStatuses.includes(status)) {
+      await connection.rollback();
       return res.status(400).json({ message: "Trạng thái không hợp lệ!" });
     }
 
-    const [result] = await db.query(
-      "UPDATE donhang SET TrangThai = ? WHERE MaDonHang = ?",
-      [status, id],
+    // 1. Lấy trạng thái hiện tại để kiểm tra trước khi đổi
+    const [current] = await connection.query(
+      "SELECT TrangThai FROM donhang WHERE MaDonHang = ? FOR UPDATE",
+      [id]
     );
 
-    if (result.affectedRows === 0) {
+    if (current.length === 0) {
+      await connection.rollback();
       return res.status(404).json({ message: "Không tìm thấy đơn hàng!" });
     }
+
+    const trangThaiCu = current[0].TrangThai;
+
+    // 2. Cập nhật trạng thái đơn hàng
+    await connection.query(
+      "UPDATE donhang SET TrangThai = ? WHERE MaDonHang = ?",
+      [status, id]
+    );
+
+    // 3. ⚡ HOOK TÍCH ĐIỂM — chạy ngầm khi đơn chuyển sang "Đã thanh toán"
+    //    Điều kiện: trạng thái MỚI là "Đã thanh toán" VÀ trạng thái CŨ chưa phải vậy
+    //    (tránh cộng điểm 2 lần nếu re-patch cùng trạng thái)
+    let pointsResult = null;
+    const PAID_STATUSES = ["Đã thanh toán", "DA_THANH_TOAN", "paid", "completed"];
+    const isNewlyPaid = PAID_STATUSES.includes(status) && !PAID_STATUSES.includes(trangThaiCu);
+
+    if (isNewlyPaid) {
+      // awardPointsOnPayment tự bảo vệ idempotency qua bảng lichsu_diem
+      pointsResult = await awardPointsOnPayment(connection, parseInt(id, 10));
+    }
+
+    await connection.commit();
 
     res.json({
       success: true,
       message: "Cập nhật trạng thái đơn hàng thành công!",
       orderId: id,
       status: status,
+      // Trả về kết quả tích điểm để FE hiển thị thông báo (nếu muốn)
+      pointsAwarded: pointsResult
+        ? {
+            diem: pointsResult.pointsEarned,
+            tongDiem: pointsResult.diemSauKhi,
+            thongBao: `Khách hàng được cộng +${pointsResult.pointsEarned} điểm tích lũy!`,
+          }
+        : null,
     });
   } catch (err) {
-    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+    await connection.rollback();
+    console.error("Lỗi cập nhật trạng thái đơn hàng:", err.message);
+    res.status(500).json({ message: "Lỗi máy chủ: " + err.message });
+  } finally {
+    connection.release();
   }
 });
 
