@@ -5,8 +5,9 @@ import {
 } from "recharts";
 import {
   BarChart2, Table2, RotateCcw, Loader2, Download, Calendar, TrendingUp,
-  ShoppingBag, BadgeDollarSign, Scissors,
+  ShoppingBag, BadgeDollarSign, Scissors, FileText,
 } from "lucide-react";
+import RevenuePdfReportModal from "./RevenuePdfReportModal";
 import "../../css/staff.css";
 
 const API_BASE = "http://localhost:5000/api";
@@ -82,6 +83,7 @@ export default function RevenueReport() {
   const [data,       setData]       = useState([]);
   const [loading,    setLoading]    = useState(false);
   const [exporting,  setExporting]  = useState(false);
+  const [showPdfModal, setShowPdfModal] = useState(false);
   const [showTable,  setShowTable]  = useState(false);
   const [error,      setError]      = useState("");
 
@@ -230,6 +232,31 @@ export default function RevenueReport() {
               ? <><Loader2 size={16} className="spin-animation" /> Đang xuất...</>
               : <><Download size={16} /> Xuất Excel</>
             }
+          </button>
+
+          {/* 📄 Nút Xuất PDF (Chủ Đầu Tư) */}
+          <button
+            className="sw-btn"
+            style={{
+              background: data.length === 0 ? "#cbd5e1" : "linear-gradient(135deg, #f59e0b, #d97706)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              padding: "8px 16px",
+              display: "flex",
+              alignItems: "center",
+              gap: 7,
+              fontWeight: 600,
+              fontSize: 14,
+              cursor: data.length === 0 ? "not-allowed" : "pointer",
+              boxShadow: data.length === 0 ? "none" : "0 4px 12px rgba(245, 158, 11, 0.35)",
+              transition: "all 0.2s",
+            }}
+            onClick={() => setShowPdfModal(true)}
+            disabled={data.length === 0}
+            title={data.length === 0 ? "Không có dữ liệu để xuất" : "Xem trước & Xuất PDF báo cáo gửi Chủ Đầu Tư"}
+          >
+            <FileText size={16} /> Báo cáo PDF (CĐT)
           </button>
         </div>
       </div>
@@ -391,6 +418,24 @@ export default function RevenueReport() {
           </div>
         </div>
       )}
+
+      {/* ── Modal Báo cáo PDF gửi Chủ Đầu Tư ── */}
+      <RevenuePdfReportModal
+        isOpen={showPdfModal}
+        onClose={() => setShowPdfModal(false)}
+        data={data}
+        from={from}
+        to={to}
+        rangeLabel={
+          rangeMode === "week"
+            ? "Tuần này"
+            : rangeMode === "month"
+            ? "Tháng này"
+            : rangeMode === "quarter"
+            ? "Quý này"
+            : "Tùy chọn"
+        }
+      />
     </div>
   );
 }
