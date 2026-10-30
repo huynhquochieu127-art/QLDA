@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import "../../css/pos.css";
 import PosSuggestions from "./PosSuggestions";
+import PosDiscountCode from "./PosDiscountCode";
 
 const CATEGORIES = [
   { id: "all", name: "Tất cả" },
@@ -390,6 +391,10 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
       table: selectedTable,
       customer: selectedCustomer,
       items: [...cart],
+      subtotal,
+      discount: appliedDiscount
+        ? { code: appliedDiscount.code, amount: discountAmount }
+        : null,
       totalAmount,
       paymentMethod,
       customerCash:
@@ -431,7 +436,10 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
             soLuong: item.quantity,
             donGia: item.price,
           })),
-          tongTien: totalAmount,
+          tongTien: subtotal,
+          giamGia: discountAmount,
+          thanhTien: totalAmount,
+          maGiamGia: appliedDiscount ? appliedDiscount.code : null,
           tienKhachDua:
             paymentMethod === "CASH" ? numericCustomerCash : totalAmount,
           phuongThucTT:
@@ -461,6 +469,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
     setShowPaymentModal(false);
     setShowReceiptModal(true);
     setCart([]);
+    setAppliedDiscount(null);
     handleClearCustomer();
   };
 
@@ -681,6 +690,17 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
             ))
           )}
         </div>
+
+        {/* Mã giảm giá (QH-89) */}
+        {cart.length > 0 && (
+          <PosDiscountCode
+            subtotal={subtotal}
+            customer={selectedCustomer}
+            applied={appliedDiscount}
+            onApply={setAppliedDiscount}
+            onRemove={handleRemoveDiscount}
+          />
+        )}
 
         {/* Món gọi kèm gợi ý từ AI (QH-95) */}
         <PosSuggestions cart={cart} products={PRODUCTS} onAdd={addToCart} />
@@ -1108,6 +1128,15 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
                     : "Chuyển khoản QR"}
                 </span>
               </div>
+
+              {lastReceipt.discount && (
+                <div className="receipt-row">
+                  <span>Giảm giá ({lastReceipt.discount.code})</span>
+                  <span>
+                    - {lastReceipt.discount.amount.toLocaleString("vi-VN")} đ
+                  </span>
+                </div>
+              )}
 
               <div className="receipt-row highlight">
                 <span>Tổng cộng</span>

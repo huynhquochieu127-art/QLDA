@@ -164,6 +164,22 @@ app.post("/api/login", async (req, res) => {
         .json({ success: false, message: "Sai email hoặc mật khẩu!" });
     }
 
+    // Tự động đồng bộ tên giữa tài khoản (taikhoan) và nhân viên (nhanvien)
+    if (userRecord.MaNhanVien && userRecord.HoTen) {
+      await db.query(
+        "UPDATE nhanvien SET HoTen = ? WHERE MaNhanVien = ? AND (HoTen != ? OR HoTen IS NULL)",
+        [userRecord.HoTen, userRecord.MaNhanVien, userRecord.HoTen]
+      );
+    }
+
+    const finalChucVu =
+      userRecord.ChucVu ||
+      (userRecord.TenVaiTro === "Admin"
+        ? "Admin"
+        : userRecord.TenVaiTro === "Quản lý"
+        ? "Quản lý"
+        : "Thu ngân");
+
     // Tạo JWT token
     const userPayload = {
       id: userRecord.MaTaiKhoan,
@@ -173,7 +189,7 @@ app.post("/api/login", async (req, res) => {
       name: userRecord.HoTen,
       role: userRecord.TenVaiTro || "Nhân viên",
       maVaiTro: userRecord.MaVaiTro,
-      chucVu: userRecord.ChucVu,
+      chucVu: finalChucVu,
       loaiNhanVien: userRecord.LoaiNhanVien || "Part-time",
     };
 

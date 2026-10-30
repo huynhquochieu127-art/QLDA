@@ -4,6 +4,63 @@ const STANDARD_WORK_DAYS = 26; // Ngày công chuẩn Full-time
 const LATE_PENALTY = 20000; // Phạt 20.000đ / lần đi trễ
 const INSURANCE_RATE = 0.105; // 10.5% BHXH, BHYT, BHTN
 
+let payrollSchemaEnsured = false;
+async function ensurePayrollSchema(conn) {
+  if (payrollSchemaEnsured) return;
+  const dbConn = conn || db;
+  try {
+    const colsToAdd = [
+      { name: "LuongCoBan", type: "DECIMAL(18,2) DEFAULT 0.00" },
+      { name: "SoCong", type: "DECIMAL(5,2) DEFAULT 0.00" },
+      { name: "SoGioLam", type: "DECIMAL(8,2) DEFAULT 0.00" },
+      { name: "SoNgayNghiKhongPhep", type: "INT DEFAULT 0" },
+      { name: "TienPhat", type: "DECIMAL(18,2) DEFAULT 0.00" },
+      { name: "GhiChu", type: "TEXT" },
+      { name: "NgayThanhToan", type: "DATETIME NULL" },
+    ];
+
+    for (const col of colsToAdd) {
+      const [res] = await dbConn.query(
+        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bangluong' AND COLUMN_NAME = ?",
+        [col.name]
+      );
+      if (res.length === 0) {
+        await dbConn.query(`ALTER TABLE bangluong ADD COLUMN ${col.name} ${col.type}`);
+        console.log(`Added column ${col.name} to bangluong`);
+      }
+    }
+
+    // Ensure MaBangLuong has AUTO_INCREMENT
+    const [mbCols] = await dbConn.query("SHOW COLUMNS FROM bangluong LIKE 'MaBangLuong'");
+    if (mbCols.length > 0 && !mbCols[0].Extra?.toLowerCase().includes("auto_increment")) {
+      await dbConn.query("ALTER TABLE bangluong MODIFY COLUMN MaBangLuong INT AUTO_INCREMENT");
+      console.log("Updated MaBangLuong to AUTO_INCREMENT");
+    }
+
+    // Ensure TrangThai is VARCHAR, not DATETIME
+    const [ttCols] = await dbConn.query("SHOW COLUMNS FROM bangluong LIKE 'TrangThai'");
+    if (ttCols.length > 0 && ttCols[0].Type?.toLowerCase().includes("datetime")) {
+      await dbConn.query("ALTER TABLE bangluong MODIFY COLUMN TrangThai VARCHAR(50) DEFAULT 'Chờ duyệt'");
+      console.log("Updated TrangThai column to VARCHAR(50)");
+    }
+
+    const [indexes] = await dbConn.query(
+      "SHOW INDEX FROM bangluong WHERE Key_name = 'unique_emp_month'"
+    );
+    if (indexes.length === 0) {
+      await dbConn.query("ALTER TABLE bangluong ADD UNIQUE KEY unique_emp_month (MaNhanVien, Thang, Nam)");
+      console.log("Added unique_emp_month key to bangluong");
+    }
+
+    payrollSchemaEnsured = true;
+  } catch (err) {
+    console.error("ensurePayrollSchema error:", err.message);
+  }
+}
+
+ensurePayrollSchema();
+exports.ensurePayrollSchema = ensurePayrollSchema;
+
 /**
  * Hàm lõi tính lương nội bộ
  * Quy tắc tính lương:
@@ -54,12 +111,13 @@ async function runPayrollCalculationInternal(thang, nam, options = {}) {
       bc.SoNgayTre,
       bc.GhiChuQL,
       nv.MaNhanVienCode,
-      nv.HoTen,
+      COALESCE(tk.HoTen, nv.HoTen) AS HoTen,
       nv.LoaiNhanVien,
       nv.Luong,
       COALESCE(nv.ChucVu, 'Nhân viên') AS ChucVu
      FROM bangcong_thang bc
      JOIN nhanvien nv ON bc.MaNhanVien = nv.MaNhanVien
+     LEFT JOIN taikhoan tk ON nv.MaTaiKhoan = tk.MaTaiKhoan
      WHERE bc.Thang = ? AND bc.Nam = ?`,
     [thang, nam]
   );
@@ -209,6 +267,7 @@ exports.runPayrollCalculationInternal = runPayrollCalculationInternal;
 // QUY TẮC CỐT LÕI: API CHỈ BẮT ĐẦU CHẠY KHI NHẬN ĐƯỢC TÍN HIỆU "ĐÃ CHỐT SỔ" TỪ PHÂN HỆ BẢNG CÔNG (TASK QH-55)
 exports.calculatePayroll = async (req, res) => {
   try {
+    await ensurePayrollSchema();
     const { thang, nam } = req.body;
     const force = req.body.force === true || req.query.force === "true";
     if (!thang || !nam) {
@@ -273,6 +332,7 @@ exports.calculatePayroll = async (req, res) => {
 // 2. [GET] /api/bangluong - ADMIN XEM DANH SÁCH BẢNG LƯƠNG THÁNG
 exports.getPayrollList = async (req, res) => {
   try {
+    await ensurePayrollSchema();
     const now = new Date();
     const thang = parseInt(req.query.thang) || now.getMonth() + 1;
     const nam = parseInt(req.query.nam) || now.getFullYear();
@@ -299,7 +359,7 @@ exports.getPayrollList = async (req, res) => {
         bl.MaBangLuong,
         bl.MaNhanVien,
         nv.MaNhanVienCode,
-        nv.HoTen,
+        COALESCE(tk.HoTen, nv.HoTen) AS HoTen,
         COALESCE(nv.ChucVu, 'Nhân viên') AS ChucVu,
         nv.LoaiNhanVien,
         bl.Thang,
@@ -319,6 +379,7 @@ exports.getPayrollList = async (req, res) => {
         DATE_FORMAT(bl.NgayTao, '%d/%m/%Y %H:%i') AS NgayTao
        FROM bangluong bl
        JOIN nhanvien nv ON bl.MaNhanVien = nv.MaNhanVien
+       LEFT JOIN taikhoan tk ON nv.MaTaiKhoan = tk.MaTaiKhoan
        WHERE bl.Thang = ? AND bl.Nam = ?
        ORDER BY nv.MaNhanVien ASC`,
       [thang, nam]
@@ -506,6 +567,7 @@ exports.approveAllPayroll = async (req, res) => {
 // 5. [GET] /api/bangluong/my - NHÂN VIÊN XEM PHIẾU LƯƠNG THẬT CỦA MÌNH (QH-59)
 exports.getMyPayslip = async (req, res) => {
   try {
+    await ensurePayrollSchema();
     const { thang, nam, maNhanVien } = req.query;
     if (!maNhanVien) {
       return res.status(400).json({ success: false, message: "Thiếu mã nhân viên!" });
@@ -518,13 +580,14 @@ exports.getMyPayslip = async (req, res) => {
       `SELECT 
         bl.*,
         nv.MaNhanVienCode,
-        nv.HoTen,
+        COALESCE(tk.HoTen, nv.HoTen) AS HoTen,
         nv.LoaiNhanVien,
         COALESCE(nv.ChucVu, 'Nhân viên') AS ChucVu,
         bc.SoNgayTre,
         bc.SoNgayNghi
        FROM bangluong bl
        JOIN nhanvien nv ON bl.MaNhanVien = nv.MaNhanVien
+       LEFT JOIN taikhoan tk ON nv.MaTaiKhoan = tk.MaTaiKhoan
        LEFT JOIN bangcong_thang bc ON (bl.MaNhanVien = bc.MaNhanVien AND bl.Thang = bc.Thang AND bl.Nam = bc.Nam)
        WHERE bl.MaNhanVien = ? AND bl.Thang = ? AND bl.Nam = ?`,
       [maNhanVien, t, n]

@@ -1072,3 +1072,130 @@
   font-size: 12px;
   color: #94a3b8;
 }
+
+/* ==========================================================================
+   QH-89: Ô NHẬP MÃ GIẢM GIÁ TRÊN POS
+   ========================================================================== */
+.pos-discount {
+  margin-bottom: 15px;
+}
+
+.pos-discount-row {
+  display: flex;
+  gap: 8px;
+}
+
+.pos-discount-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px dashed #94a3b8;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  outline: none;
+}
+
+.pos-discount-input::placeholder {
+  text-transform: none;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.pos-discount-input:focus {
+  border-style: solid;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.pos-discount-input.invalid {
+  border-style: solid;
+  border-color: #dc2626;
+}
+
+.pos-discount-btn {
+  padding: 9px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pos-discount-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pos-discount-error {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #dc2626;
+}
+
+.pos-discount-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.pos-discount-applied {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f0fdf4;
+  border: 1px dashed #16a34a;
+}
+
+.pos-discount-applied-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.pos-discount-tag {
+  font-weight: 700;
+  font-size: 13px;
+  color: #166534;
+}
+
+.pos-discount-note {
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.pos-discount-amount {
+  font-weight: 700;
+  color: #16a34a;
+  white-space: nowrap;
+}
+
+.pos-discount-remove {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pos-discount-remove:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.summary-row.discount span:last-child {
+  color: #16a34a;
+  font-weight: 600;
+}
