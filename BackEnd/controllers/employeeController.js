@@ -805,4 +805,420 @@ exports.getRoles = async (req, res) => {
   }
 };
 
+/**
+ * [GET] /api/employees/template
+ * Xuất file Excel mẫu (.xlsx) chuẩn gồm các cột bắt buộc:
+ * Họ tên, Số điện thoại (dùng làm tài khoản), CCCD, Role
+ */
+exports.downloadEmployeeTemplate = async (req, res) => {
+  try {
+    const ExcelJS = require("exceljs");
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "QuanLyCF System";
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet("NhanVienTemplate", {
+      views: [{ showGridLines: true }],
+    });
+
+    // 4 Cột bắt buộc theo yêu cầu
+    sheet.columns = [
+      { header: "Họ tên", key: "hoTen", width: 26 },
+      { header: "Số điện thoại", key: "soDienThoai", width: 22 },
+      { header: "CCCD", key: "cccd", width: 22 },
+      { header: "Role", key: "role", width: 20 },
+    ];
+
+    // Style Header (Dòng 1)
+    const headerRow = sheet.getRow(1);
+    headerRow.height = 32;
+    headerRow.eachCell((cell) => {
+      cell.font = { name: "Arial", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top:    { style: "thin", color: { argb: "FF475569" } },
+        bottom: { style: "thin", color: { argb: "FF475569" } },
+        left:   { style: "thin", color: { argb: "FF475569" } },
+        right:  { style: "thin", color: { argb: "FF475569" } },
+      };
+    });
+
+    // Dữ liệu mẫu minh họa
+    const sampleRows = [
+      {
+        hoTen: "Nguyễn Văn An",
+        soDienThoai: "0901234567",
+        cccd: "079200001234",
+        role: "Quản lý",
+      },
+      {
+        hoTen: "Trần Thị Bình",
+        soDienThoai: "0912345678",
+        cccd: "079200005678",
+        role: "Nhân viên",
+      },
+      {
+        hoTen: "Lê Hoàng Cường",
+        soDienThoai: "0987654321",
+        cccd: "079200009999",
+        role: "Thu ngân",
+      },
+    ];
+
+    sampleRows.forEach((item) => {
+      const row = sheet.addRow(item);
+      row.height = 24;
+      row.eachCell((cell, colNum) => {
+        cell.font = { name: "Arial", size: 10 };
+        cell.border = {
+          top:    { style: "hair", color: { argb: "FFE2E8F0" } },
+          bottom: { style: "hair", color: { argb: "FFE2E8F0" } },
+          left:   { style: "hair", color: { argb: "FFE2E8F0" } },
+          right:  { style: "hair", color: { argb: "FFE2E8F0" } },
+        };
+        // Định dạng Text (@) cho SĐT và CCCD để không bị mất số 0 ở đầu
+        if (colNum === 2 || colNum === 3) {
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+          cell.numFmt = "@";
+        } else if (colNum === 4) {
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+        } else {
+          cell.alignment = { horizontal: "left", vertical: "middle" };
+        }
+      });
+    });
+
+    const fileName = "Template_NhanVien.xlsx";
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(fileName)}"`
+    );
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error("Lỗi xuất file mẫu template nhân viên:", err);
+    res.status(500).json({ success: false, message: "Lỗi tạo file mẫu: " + err.message });
+  }
+};
+
+/**
+ * [POST] /api/employees/import
+ * Đọc file Excel tải lên, bóc tách dữ liệu từng dòng và lưu vào CSDL.
+ * Xử lý Validate chặt chẽ:
+ * - Báo lỗi và dừng tiến trình nếu định dạng file sai hoặc thiếu cột bắt buộc.
+ * - Bỏ qua dòng nếu Số điện thoại bị trùng lặp trong hệ thống hoặc trong file.
+ */
+exports.importEmployeesFromExcel = async (req, res) => {
+  // 1. Kiểm tra có file tải lên
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: "Vui lòng chọn file Excel để tải lên!",
+    });
+  }
+
+  // 2. Validate định dạng file (chỉ chấp nhận đuôi .xlsx)
+  const path = require("path");
+  const originalName = req.file.originalname || "";
+  const ext = path.extname(originalName).toLowerCase();
+
+  if (ext !== ".xlsx") {
+    return res.status(400).json({
+      success: false,
+      message: `Định dạng file không hợp lệ ("${ext}")! Hệ thống chỉ chấp nhận file Excel có đuôi .xlsx`,
+    });
+  }
+
+  // 3. Đọc workbook bằng ExcelJS
+  const ExcelJS = require("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(req.file.buffer);
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      message: "Không thể đọc nội dung file Excel! File có thể bị hỏng hoặc mã hóa không tương thích.",
+    });
+  }
+
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet || worksheet.rowCount < 1) {
+    return res.status(400).json({
+      success: false,
+      message: "File Excel rỗng, không tìm thấy trang tính hoặc dữ liệu nào!",
+    });
+  }
+
+  // 4. Validate Header các cột bắt buộc: Họ tên, Số điện thoại, CCCD, Role
+  const headerRow = worksheet.getRow(1);
+  const headerMap = {};
+
+  headerRow.eachCell((cell, colNumber) => {
+    const val = String(cell.value || "").trim().toLowerCase();
+    if (
+      val.includes("họ tên") ||
+      val.includes("ho ten") ||
+      val.includes("hoten") ||
+      val.includes("họ và tên") ||
+      val === "name" ||
+      val === "fullname"
+    ) {
+      headerMap.hoTen = colNumber;
+    } else if (
+      val.includes("số điện thoại") ||
+      val.includes("so dien thoai") ||
+      val.includes("sodienthoai") ||
+      val.includes("sđt") ||
+      val.includes("sdt") ||
+      val === "phone"
+    ) {
+      headerMap.soDienThoai = colNumber;
+    } else if (
+      val.includes("cccd") ||
+      val.includes("cmnd") ||
+      val.includes("căn cước") ||
+      val.includes("can cuoc") ||
+      val === "citizen id"
+    ) {
+      headerMap.cccd = colNumber;
+    } else if (
+      val.includes("role") ||
+      val.includes("vai trò") ||
+      val.includes("vai tro") ||
+      val.includes("chức vụ") ||
+      val.includes("chuc vu") ||
+      val === "position"
+    ) {
+      headerMap.role = colNumber;
+    }
+  });
+
+  const missingCols = [];
+  if (!headerMap.hoTen) missingCols.push("Họ tên");
+  if (!headerMap.soDienThoai) missingCols.push("Số điện thoại");
+  if (!headerMap.cccd) missingCols.push("CCCD");
+  if (!headerMap.role) missingCols.push("Role");
+
+  if (missingCols.length > 0) {
+    return res.status(400).json({
+      success: false,
+      message: `Định dạng file sai! File Excel thiếu các cột bắt buộc: [${missingCols.join(", ")}]. Vui lòng tải file mẫu (.xlsx) để đảm bảo cấu trúc bảng!`,
+    });
+  }
+
+  if (worksheet.rowCount < 2) {
+    return res.status(400).json({
+      success: false,
+      message: "File Excel chỉ có dòng tiêu đề, chưa có dữ liệu nhân viên nào!",
+    });
+  }
+
+  // 5. Kết nối DB & Kiểm tra trùng lặp Số điện thoại
+  const connection = await db.getConnection();
+  try {
+    await ensureEmployeeSchema(connection);
+
+    // Lấy toàn bộ số điện thoại hiện có trong hệ thống (cả taikhoan và nhanvien)
+    const [existingPhoneRows] = await connection.query(
+      `SELECT DISTINCT SoDienThoai FROM (
+         SELECT SoDienThoai FROM taikhoan WHERE SoDienThoai IS NOT NULL AND SoDienThoai != ''
+         UNION
+         SELECT SoDienThoai FROM nhanvien WHERE SoDienThoai IS NOT NULL AND SoDienThoai != ''
+       ) AS all_phones`
+    );
+
+    const existingPhonesSet = new Set(
+      existingPhoneRows.map((r) => String(r.SoDienThoai).replace(/\D/g, ""))
+    );
+    const seenInFilePhones = new Set();
+
+    const imported = [];
+    const skipped = [];
+    const errors = [];
+
+    // Duyệt từng dòng từ dòng 2
+    for (let rNum = 2; rNum <= worksheet.rowCount; rNum++) {
+      const row = worksheet.getRow(rNum);
+
+      const rawHoTen = row.getCell(headerMap.hoTen).text || row.getCell(headerMap.hoTen).value;
+      const rawPhone = row.getCell(headerMap.soDienThoai).text || row.getCell(headerMap.soDienThoai).value;
+      const rawCccd  = row.getCell(headerMap.cccd).text || row.getCell(headerMap.cccd).value;
+      const rawRole  = row.getCell(headerMap.role).text || row.getCell(headerMap.role).value;
+
+      const hoTen = rawHoTen !== null && rawHoTen !== undefined ? String(rawHoTen).trim() : "";
+      const rawPhoneStr = rawPhone !== null && rawPhone !== undefined ? String(rawPhone).trim() : "";
+      const cccd = rawCccd !== null && rawCccd !== undefined ? String(rawCccd).trim() : "";
+      const role = rawRole !== null && rawRole !== undefined ? String(rawRole).trim() : "";
+
+      // Dòng rỗng hoàn toàn -> bỏ qua
+      if (!hoTen && !rawPhoneStr && !cccd && !role) {
+        continue;
+      }
+
+      // Kiểm tra thiếu trường bắt buộc
+      if (!hoTen || !rawPhoneStr || !cccd || !role) {
+        errors.push({
+          row: rNum,
+          hoTen: hoTen || "(Trống)",
+          soDienThoai: rawPhoneStr || "(Trống)",
+          reason: "Thiếu dữ liệu bắt buộc (Họ tên, Số điện thoại, CCCD, Role đều không được để trống)",
+        });
+        continue;
+      }
+
+      // Chuẩn hóa Số điện thoại (chỉ lấy số)
+      const phoneClean = rawPhoneStr.replace(/\D/g, "");
+      if (phoneClean.length < 9 || phoneClean.length > 11) {
+        errors.push({
+          row: rNum,
+          hoTen,
+          soDienThoai: rawPhoneStr,
+          reason: "Số điện thoại không hợp lệ (phải từ 9 đến 11 chữ số)",
+        });
+        continue;
+      }
+
+      // Chuẩn hóa CCCD (9 đến 12 chữ số)
+      const cccdClean = cccd.replace(/\D/g, "");
+      if (cccdClean.length < 9 || cccdClean.length > 12) {
+        errors.push({
+          row: rNum,
+          hoTen,
+          soDienThoai: phoneClean,
+          reason: "Số CCCD không hợp lệ (phải từ 9 đến 12 chữ số)",
+        });
+        continue;
+      }
+
+      // ⭐ KIỂM TRA TRÙNG LẶP SỐ ĐIỆN THOẠI (BỎ QUA DÒNG NẾU TRÙNG)
+      if (existingPhonesSet.has(phoneClean)) {
+        skipped.push({
+          row: rNum,
+          hoTen,
+          soDienThoai: phoneClean,
+          reason: "Số điện thoại đã tồn tại trong hệ thống (bỏ qua dòng)",
+        });
+        continue;
+      }
+
+      if (seenInFilePhones.has(phoneClean)) {
+        skipped.push({
+          row: rNum,
+          hoTen,
+          soDienThoai: phoneClean,
+          reason: "Số điện thoại bị trùng lặp với một dòng trước trong file (bỏ qua dòng)",
+        });
+        continue;
+      }
+
+      seenInFilePhones.add(phoneClean);
+
+      // Phân loại Role:
+      const roleLower = role.toLowerCase();
+      let maVaiTro = 3; // Mặc định: Nhân viên
+      let chucVu = "Nhân viên";
+
+      if (
+        roleLower.includes("quản lý") ||
+        roleLower.includes("quan ly") ||
+        roleLower.includes("admin") ||
+        roleLower.includes("manager")
+      ) {
+        maVaiTro = 2; // Quản lý
+        chucVu = "Quản lý";
+      } else if (roleLower.includes("thu ngân") || roleLower.includes("cashier")) {
+        chucVu = "Thu ngân";
+      } else if (roleLower.includes("pha chế") || roleLower.includes("barista")) {
+        chucVu = "Pha chế";
+      } else {
+        chucVu = role;
+      }
+
+      // Tạo mật khẩu mặc định: 6 số cuối CCCD (hoặc SĐT), mã hóa bcrypt
+      const defaultPass = cccdClean.length >= 6 ? cccdClean.slice(-6) : phoneClean.slice(-6);
+      const hashedPassword = await bcrypt.hash(defaultPass, 10);
+      const autoEmail = `${phoneClean}@quanlycf.vn`;
+
+      // Insert vào CSDL qua Transaction
+      try {
+        await connection.beginTransaction();
+
+        // 1. Thêm vào taikhoan (Users)
+        const [accResult] = await connection.query(
+          `INSERT INTO taikhoan (HoTen, Email, MatKhau, SoDienThoai, MaVaiTro, TrangThaiHoatDong, NgayTao)
+           VALUES (?, ?, ?, ?, ?, 1, NOW())`,
+          [hoTen, autoEmail, hashedPassword, phoneClean, maVaiTro]
+        );
+        const maTaiKhoan = accResult.insertId;
+
+        // 2. Sinh mã NV tự động
+        const maNhanVienCode = await generateEmployeeCode(connection);
+
+        // 3. Thêm vào nhanvien (Employees)
+        await connection.query(
+          `INSERT INTO nhanvien (
+            MaTaiKhoan, MaNhanVienCode, HoTen, GioiTinh, SoDienThoai, CCCD,
+            ChucVu, LoaiNhanVien, LoaiLuong, Luong, base_salary, NgayVaoLam, TrangThai
+          ) VALUES (?, ?, ?, 'Nam', ?, ?, ?, 'Full-time', 'MONTHLY', 0, 0, CURDATE(), 'Đang làm việc')`,
+          [maTaiKhoan, maNhanVienCode, hoTen, phoneClean, cccdClean, chucVu]
+        );
+
+        await connection.commit();
+
+        // Cập nhật SĐT vào Set đã có để các dòng sau không bị trùng
+        existingPhonesSet.add(phoneClean);
+
+        imported.push({
+          row: rNum,
+          maNhanVienCode,
+          hoTen,
+          soDienThoai: phoneClean,
+          cccd: cccdClean,
+          role: chucVu,
+          defaultPassword: defaultPass,
+        });
+      } catch (insertErr) {
+        await connection.rollback();
+        errors.push({
+          row: rNum,
+          hoTen,
+          soDienThoai: phoneClean,
+          reason: "Lỗi lưu CSDL: " + insertErr.message,
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Nhập dữ liệu hoàn tất: Đã lưu ${imported.length} nhân viên mới, bỏ qua ${skipped.length} dòng trùng SĐT, có ${errors.length} dòng lỗi.`,
+      summary: {
+        totalRows: worksheet.rowCount - 1,
+        importedCount: imported.length,
+        skippedCount: skipped.length,
+        errorCount: errors.length,
+      },
+      data: {
+        imported,
+        skipped,
+        errors,
+      },
+    });
+  } catch (err) {
+    console.error("Lỗi import nhân viên từ Excel:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi xử lý file Excel: " + err.message,
+    });
+  } finally {
+    connection.release();
+  }
+};
+
 exports.ensureEmployeeSchema = ensureEmployeeSchema;

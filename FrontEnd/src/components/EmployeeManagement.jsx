@@ -27,8 +27,10 @@ import {
   Pencil,
   Lock,
   Unlock,
+  FileSpreadsheet,
 } from "lucide-react";
 import { EmployeeDetailModal, EmployeeEditModal } from "./EmployeeActionModals";
+import EmployeeExcelImportModal from "./EmployeeExcelImportModal";
 
 const API_BASE = "http://localhost:5000/api";
 
@@ -153,6 +155,7 @@ export default function EmployeeManagement() {
 
   // Modal thêm nhân viên
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -444,27 +447,53 @@ export default function EmployeeManagement() {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setErrorMsg("");
-            setShowAddModal(true);
-          }}
-          style={{
-            backgroundColor: "#4f46e5",
-            color: "#fff",
-            border: "none",
-            borderRadius: "8px",
-            padding: "10px 18px",
-            fontWeight: 600,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            boxShadow: "0 2px 8px rgba(79, 70, 229, 0.3)",
-          }}
-        >
-          <UserPlus size={18} /> Thêm nhân viên mới
-        </button>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          {/* Nút Nhập từ Excel */}
+          <button
+            onClick={() => setShowImportModal(true)}
+            style={{
+              background: "linear-gradient(135deg, #10b981, #059669)",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              padding: "10px 18px",
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              boxShadow: "0 2px 8px rgba(16, 185, 129, 0.3)",
+              fontSize: "14px",
+            }}
+            title="Tải file mẫu & Nhập danh sách nhân viên từ Excel (.xlsx)"
+          >
+            <FileSpreadsheet size={18} /> Nhập từ Excel
+          </button>
+
+          {/* Nút Thêm nhân viên thủ công */}
+          <button
+            onClick={() => {
+              setErrorMsg("");
+              setShowAddModal(true);
+            }}
+            style={{
+              backgroundColor: "#4f46e5",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              padding: "10px 18px",
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              boxShadow: "0 2px 8px rgba(79, 70, 229, 0.3)",
+              fontSize: "14px",
+            }}
+          >
+            <UserPlus size={18} /> Thêm nhân viên mới
+          </button>
+        </div>
       </div>
 
       {/* SEARCH BAR & SORT CONTROLS */}
@@ -2064,6 +2093,13 @@ export default function EmployeeManagement() {
           </div>
         </div>
       )}
+
+      {/* Modal Nhập Nhân Viên từ Excel */}
+      <EmployeeExcelImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => fetchEmployees(currentPage, search, sortBy, sortOrder)}
+      />
     </div>
   );
 }
