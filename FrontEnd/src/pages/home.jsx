@@ -15,7 +15,6 @@ import LeaveRequestManagement from "../components/LeaveRequestManagement";
 import AiInsightsManagement from "../components/AiInsightsManagement";
 import ShiftApprovalManagement from "../components/ShiftApprovalManagement";
 import EmployeeCheckIn from "../components/EmployeeCheckIn";
-import ShiftRegistration from "../components/ShiftRegistration";
 import MyLeaveRequests from "../components/MyLeaveRequests";
 import MyTimesheet from "../components/MyTimesheet";
 import Payslip from "../components/Payslip";
@@ -24,7 +23,6 @@ import WorkingStaffPanel from "../components/WorkingStaffPanel";
 import PayrollManagement from "../components/PayrollManagement";
 import PartTimeShiftConfig from "../components/PartTimeShiftConfig";
 import FullTimeShiftConfig from "../components/FullTimeShiftConfig";
-import FullTimeShiftRegistration from "../components/FullTimeShiftRegistration";
 import NotificationBell from "../components/NotificationBell";
 import DiscountManagement from "../components/DiscountManagement";
 import {
@@ -165,7 +163,7 @@ export default function Home() {
       id: "pos",
       label: "Tạo đơn & Thanh toán (POS)",
       icon: <CreditCard size={18} />,
-      roles: ["admin", "manager", "cashier"],
+      roles: ["admin", "manager", "cashier", "waiter"],
     },
     {
       id: "orders",
@@ -210,20 +208,6 @@ export default function Home() {
       roles: ["manager", "cashier", "barista", "waiter"],
     },
     {
-      id: "my_shifts_fulltime",
-      label: "Đăng ký ca làm (Full-time)",
-      icon: <Calendar size={18} />,
-      roles: ["admin", "manager", "cashier", "barista", "waiter"],
-      condition: currentRole === "admin" || !isPartTimeStaff,
-    },
-    {
-      id: "my_shifts_parttime",
-      label: "Đăng ký ca làm (Part-time)",
-      icon: <Clock size={18} />,
-      roles: ["admin", "manager", "cashier", "barista", "waiter"],
-      condition: currentRole === "admin" || isPartTimeStaff,
-    },
-    {
       id: "my_timesheet",
       label: "Bảng công của tôi",
       icon: <ClipboardCheck size={18} />,
@@ -239,7 +223,7 @@ export default function Home() {
       id: "timekeeping",
       label: "Điểm danh & Chấm công",
       icon: <CheckSquare size={18} />,
-      roles: ["admin", "manager", "cashier", "barista", "waiter"],
+      roles: ["admin", "manager"],
     },
     {
       id: "leave_requests",
@@ -418,13 +402,6 @@ export default function Home() {
 
           {activeTab === "my_checkin" && <EmployeeCheckIn />}
 
-          {activeTab === "my_shifts_fulltime" && <FullTimeShiftRegistration />}
-
-          {activeTab === "my_shifts_parttime" && <ShiftRegistration />}
-
-          {activeTab === "my_shifts" && (
-            isPartTimeStaff ? <ShiftRegistration /> : <FullTimeShiftRegistration />
-          )}
 
           {activeTab === "my_timesheet" && <MyTimesheet />}
 

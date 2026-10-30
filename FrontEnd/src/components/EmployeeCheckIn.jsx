@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import axios from "axios";
 import {
   LogIn,
@@ -49,6 +49,62 @@ export default function EmployeeCheckIn() {
   const [localRequests, setLocalRequests] = useState(() =>
     readLocal(STORAGE_KEYS.attendanceRequests).filter((r) => r.staffId === user.staffId)
   );
+
+  // Tải dữ liệu chấm công hôm nay của nhân viên từ MySQL
+  const fetchMyTodayCheckins = useCallback(() => {
+    const empId = user.maNhanVien || user.staffId;
+    if (!empId) return;
+
+    axios
+      .get(`${API_BASE}/timekeeping/my-today`, {
+        params: { maNhanVien: empId, staffId: user.staffId },
+      })
+      .then((res) => {
+        if (res.data?.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
+          const dbRecords = res.data.data.map((r) => {
+            const shiftNameLower = (r.TenCaLam || "").toLowerCase();
+            let shiftType = "morning";
+            if (shiftNameLower.includes("chiều") || shiftNameLower.includes("2") || shiftNameLower.includes("b")) {
+              shiftType = "afternoon";
+            } else if (shiftNameLower.includes("tối") || shiftNameLower.includes("3")) {
+              shiftType = "evening";
+            }
+
+            return {
+              id: `DB-${r.MaChamCong}`,
+              staffId: user.staffId,
+              staffName: user.name,
+              position: user.position,
+              dateKey: r.NgayLam,
+              shiftType,
+              shiftName: r.TenCaLam || "Ca làm việc",
+              shiftStart: r.GioBatDau || "07:00",
+              shiftEnd: r.GioKetThuc || "12:00",
+              checkIn: r.GioCheckIn,
+              checkOut: r.GioCheckOut || null,
+              isLate: Boolean(r.DiTre),
+              lateMinutes: r.DiTre ? 15 : 0,
+              timeSource: "SERVER_DB",
+            };
+          });
+
+          // Hợp nhất dữ liệu: ưu tiên dữ liệu từ DB
+          setCheckins((prev) => {
+            const others = prev.filter(
+              (p) => !(p.staffId === user.staffId && p.dateKey === toDateKey(new Date()))
+            );
+            const nextList = [...dbRecords, ...others];
+            writeLocal(STORAGE_KEYS.checkins, nextList);
+            return nextList;
+          });
+        }
+      })
+      .catch(() => {});
+  }, [user.maNhanVien, user.staffId, user.name, user.position]);
+
+  useEffect(() => {
+    fetchMyTodayCheckins();
+  }, [fetchMyTodayCheckins]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -133,6 +189,7 @@ export default function EmployeeCheckIn() {
         timeSource: "SERVER_TIME",
       };
       saveCheckins([record, ...checkins]);
+      fetchMyTodayCheckins();
 
       setNotice({
         type: isLate ? "warning" : "success",
@@ -188,6 +245,7 @@ export default function EmployeeCheckIn() {
       const checkOut = serverData.serverTime || new Date().toISOString();
 
       saveCheckins(checkins.map((r) => (r.id === openRecord.id ? { ...r, checkOut } : r)));
+      fetchMyTodayCheckins();
       setNotice({
         type: "success",
         text:
@@ -210,11 +268,23 @@ export default function EmployeeCheckIn() {
   const handleSupplementSubmitted = (record) => {
     setShowSupplementForm(false);
     setLocalRequests((prev) => [record, ...prev]);
+    // Tải lại danh sách từ server nếu có maNhanVien
+    if (user.maNhanVien) {
+      axios
+        .get(`${API_BASE}/yeucau-chamcong`, { params: { status: "all" } })
+        .then((res) => {
+          const list = (res.data?.data || []).filter(
+            (r) => String(r.MaNhanVien) === String(user.maNhanVien)
+          );
+          setServerRequests(list);
+        })
+        .catch(() => {});
+    }
     setNotice({
       type: "success",
       text: record.synced
-        ? "Đã gửi yêu cầu bổ sung điểm danh. Vui lòng chờ Quản lý duyệt."
-        : "Đã ghi nhận yêu cầu bổ sung điểm danh (Chờ duyệt). Máy chủ chưa sẵn sàng nên yêu cầu đang lưu tạm trên máy này.",
+        ? "Đã gửi yêu cầu bổ sung điểm danh thành công lên hệ thống. Vui lòng chờ Quản lý duyệt."
+        : "Đã ghi nhận yêu cầu bổ sung điểm danh (Chờ duyệt).",
     });
   };
 

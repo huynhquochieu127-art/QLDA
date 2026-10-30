@@ -50,6 +50,139 @@ router.get("/yeucau-chamcong", async (req, res) => {
   }
 });
 
+// [POST] Gửi yêu cầu bổ sung điểm danh khi nhân viên quên check-in / check-out (QH-49)
+router.post("/yeucau-chamcong", async (req, res) => {
+  try {
+    const {
+      maNhanVien,
+      maNhanVienCode,
+      staffId,
+      ngay,
+      caLam,
+      loai,
+      thoiGian,
+      lyDo,
+    } = req.body;
+
+    const empId = await resolveEmployeeId(maNhanVien || maNhanVienCode || staffId);
+    if (!empId) {
+      return res.status(400).json({
+        success: false,
+        message: "Không tìm thấy thông tin nhân viên hợp lệ!",
+      });
+    }
+
+    if (!ngay || !lyDo) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập đầy đủ ngày và lý do!",
+      });
+    }
+
+    // Tra cứu mã ca làm
+    let maCaLam = null;
+    if (caLam) {
+      const [caRows] = await db.query(
+        "SELECT MaCaLam FROM calam WHERE TenCaLam LIKE ? OR MaCaLam = ? LIMIT 1",
+        [`%${caLam}%`, Number(caLam) || 0]
+      );
+      if (caRows.length > 0) {
+        maCaLam = caRows[0].MaCaLam;
+      }
+    }
+
+    const [result] = await db.query(
+      `INSERT INTO yeucau_chamcong 
+       (MaNhanVien, MaCaLam, Ngay, CaLam, Loai, ThoiGian, LyDo, TrangThai, NgayTao)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
+      [
+        empId,
+        maCaLam,
+        ngay,
+        caLam || "Ca làm việc",
+        loai || "Quên check-in",
+        thoiGian || "",
+        lyDo.trim(),
+      ]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Đã gửi yêu cầu bổ sung điểm danh thành công! Vui lòng chờ Quản lý duyệt.",
+      data: {
+        maYeuCau: result.insertId,
+        maNhanVien: empId,
+        ngay,
+        caLam,
+        loai,
+        thoiGian,
+        lyDo,
+        trangThai: "pending",
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi gửi yêu cầu bổ sung điểm danh:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi máy chủ khi gửi yêu cầu bổ sung: " + error.message,
+    });
+  }
+});
+
+// [GET] Lấy danh sách chấm công hôm nay của nhân viên đang đăng nhập (từ MySQL)
+router.get("/timekeeping/my-today", async (req, res) => {
+  try {
+    const { maNhanVien, staffId } = req.query;
+    const empId = await resolveEmployeeId(maNhanVien || staffId);
+    if (!empId) {
+      return res.status(400).json({
+        success: false,
+        message: "Mã nhân viên không hợp lệ!",
+      });
+    }
+
+    const { serverDate } = getServerDateTime();
+    const queryDate = req.query.date || serverDate;
+
+    const [rows] = await db.query(
+      `SELECT 
+        cc.MaChamCong,
+        cc.MaNhanVien,
+        cc.MaCaLam,
+        DATE_FORMAT(cc.NgayLam, '%Y-%m-%d') AS NgayLam,
+        DATE_FORMAT(cc.GioCheckIn, '%Y-%m-%dT%H:%i:%s') AS GioCheckIn,
+        DATE_FORMAT(cc.GioCheckOut, '%Y-%m-%dT%H:%i:%s') AS GioCheckOut,
+        TIME_FORMAT(cc.GioCheckIn, '%H:%i') AS GioCheckInStr,
+        TIME_FORMAT(cc.GioCheckOut, '%H:%i') AS GioCheckOutStr,
+        cc.SoGioLam,
+        cc.DiTre,
+        cc.VeSom,
+        cc.TrangThai,
+        cc.GhiChu,
+        cl.TenCaLam,
+        TIME_FORMAT(cl.GioBatDau, '%H:%i') AS GioBatDau,
+        TIME_FORMAT(cl.GioKetThuc, '%H:%i') AS GioKetThuc
+      FROM chamcong cc
+      LEFT JOIN calam cl ON cc.MaCaLam = cl.MaCaLam
+      WHERE cc.MaNhanVien = ? AND (cc.NgayLam = ? OR DATE(cc.GioCheckIn) = ?)
+      ORDER BY cc.MaChamCong DESC`,
+      [empId, queryDate, queryDate]
+    );
+
+    return res.json({
+      success: true,
+      date: queryDate,
+      data: rows,
+    });
+  } catch (error) {
+    console.error("Lỗi lấy chấm công hôm nay của nhân viên:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi máy chủ khi lấy chấm công: " + error.message,
+    });
+  }
+});
+
 // 2. DUYỆT YÊU CẦU ("ĐỒNG Ý") & TỰ ĐỘNG SINH BẢN GHI CHECK-IN/OUT HỢP LỆ
 router.put("/yeucau-chamcong/:id/approve", async (req, res) => {
   const maYeuCau = req.params.id;

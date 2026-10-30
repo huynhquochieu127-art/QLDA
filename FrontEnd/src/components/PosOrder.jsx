@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import axios from "axios";
 import "../../css/pos.css";
 import PosSuggestions from "./PosSuggestions";
 import PosDiscountCode from "./PosDiscountCode";
@@ -226,11 +227,63 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
     alert(`Đã tạo thành công khách hàng ${createdCustomer.name}`);
   };
 
-  // Lọc sản phẩm theo danh mục
+const getProductImageUrl = (img) => {
+  if (!img) return "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=200";
+  if (img.startsWith("http://") || img.startsWith("https://") || img.startsWith("data:")) return img;
+  if (img.startsWith("/")) return `http://localhost:5000${img}`;
+  return `http://localhost:5000/${img}`;
+};
+
+  // State danh sách đồ uống từ CSDL
+  const [posProducts, setPosProducts] = useState(PRODUCTS);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+
+  // Lấy danh sách món từ CSDL: Chỉ lấy món "Còn hàng" (is_active !== 0), món "Hết hàng" tuyệt đối không hiển thị trên POS
+  const fetchPosProducts = useCallback(async () => {
+    setLoadingProducts(true);
+    try {
+      const res = await axios.get("http://localhost:5000/api/products?availableOnly=true");
+      if (Array.isArray(res.data) && res.data.length > 0) {
+        const mapped = res.data
+          .filter((p) => p.is_active !== 0) // Lọc bỏ tuyệt đối những món "Hết hàng"
+          .map((p) => {
+            let cat = "coffee";
+            const catName = (p.TenDanhMuc || "").toLowerCase();
+            if (catName.includes("bánh") || catName.includes("cake") || p.MaDanhMuc === 2) {
+              cat = "cake";
+            } else if (catName.includes("trà") || catName.includes("tea") || p.MaDanhMuc === 3) {
+              cat = "tea";
+            } else if (catName.includes("ăn vặt") || catName.includes("snack") || p.MaDanhMuc === 4) {
+              cat = "snack";
+            }
+            return {
+              id: p.MaSanPham,
+              name: p.TenSanPham,
+              price: Number(p.Gia),
+              category: cat,
+              image: getProductImageUrl(p.HinhAnh),
+              is_active: p.is_active,
+            };
+          });
+        setPosProducts(mapped);
+      }
+    } catch (e) {
+      console.warn("Không thể tải danh sách món POS từ API, dùng danh sách dự phòng:", e.message);
+    } finally {
+      setLoadingProducts(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPosProducts();
+  }, [fetchPosProducts]);
+
+  // Lọc sản phẩm theo danh mục (chỉ hiển thị những món CÒN HÀNG)
+  const availableProducts = posProducts.filter((item) => item.is_active !== 0);
   const filteredProducts =
     activeCategory === "all"
-      ? PRODUCTS
-      : PRODUCTS.filter((item) => item.category === activeCategory);
+      ? availableProducts
+      : availableProducts.filter((item) => item.category === activeCategory);
 
   // Thêm vào giỏ hàng
   const addToCart = (product) => {
@@ -500,9 +553,13 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
               onClick={() => addToCart(product)}
             >
               <img
-                src={product.image}
+                src={getProductImageUrl(product.image)}
                 alt={product.name}
                 className="product-image"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = "https://images.unsplash.com/photo-1509722747041-616f39b57569?w=200";
+                }}
               />
               <div className="product-info">
                 <h4 className="product-name">{product.name}</h4>

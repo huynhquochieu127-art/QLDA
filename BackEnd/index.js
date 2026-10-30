@@ -1,4 +1,5 @@
 const path = require("path");
+const fs = require("fs");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const http = require("http"); // Cần để Socket.IO gắn vào
@@ -7,9 +8,36 @@ const cors = require("cors");
 const mysql = require("mysql2/promise");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+const multer = require("multer");
 const employeeRoutes = require("./routes/employeeRoutes");
 const leaveRequestRoutes = require("./routes/leaveRequestRoutes");
 const { ensurePointsLogTable, awardPointsOnPayment } = require("./services/pointsService");
+
+// ── Multer: upload ảnh sản phẩm ──────────────────────────────────────────────
+const UPLOAD_DIR = path.join(__dirname, "uploads", "products");
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const productImageStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const unique = Date.now() + "-" + Math.round(Math.random() * 1e6);
+    cb(null, "product-" + unique + ext);
+  },
+});
+const uploadProductImage = multer({
+  storage: productImageStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // Tối đa 5MB
+  fileFilter: (req, file, cb) => {
+    const allowed = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
+    if (allowed.includes(path.extname(file.originalname).toLowerCase())) {
+      cb(null, true);
+    } else {
+      cb(new Error("Chỉ chấp nhận file ảnh: jpg, jpeg, png, webp, gif!"));
+    }
+  },
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 const app = express();
 const httpServer = http.createServer(app); // Tạo HTTP Server từ Express
@@ -31,6 +59,8 @@ app.set("io", io);
 
 app.use(cors());
 app.use(express.json());
+// Serve ảnh sản phẩm dạng static (FE truy cập qua /uploads/products/filename)
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api", employeeRoutes);
 app.use("/api/leave-requests", leaveRequestRoutes);
 app.use("/api/don-xin-nghi", leaveRequestRoutes);
@@ -579,6 +609,175 @@ app.patch("/api/orders/:id/status", async (req, res) => {
 });
 
 // ==========================================
+// 2.1 API CHECKOUT (POS THANH TOÁN TẠI QUẦY)
+// ==========================================
+app.post("/api/checkout", async (req, res) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const {
+      maBan,
+      maNhanVien,
+      maKhachHang,
+      items = [],
+      tongTien = 0,
+      giamGia = 0,
+      thanhTien = 0,
+      maGiamGia = null,
+      tienKhachDua = 0,
+      phuongThucTT = "TIEN_MAT",
+    } = req.body;
+
+    if (!items || items.length === 0) {
+      await connection.rollback();
+      return res.status(400).json({ success: false, message: "Giỏ hàng trống!" });
+    }
+
+    const finalAmount = Number(thanhTien) || Number(tongTien) || 0;
+    const discountVal = Number(giamGia) || 0;
+    const subtotalVal = Number(tongTien) || finalAmount;
+    const payMethod = phuongThucTT === "CHUYEN_KHOAN" ? "transfer" : "cash";
+
+    // 1. Lưu đơn hàng vào bảng donhang (Trạng thái: Đã thanh toán)
+    const [orderRes] = await connection.query(
+      `INSERT INTO donhang 
+       (MaBan, MaNhanVien, MaKhachHang, NgayDat, TongTien, GiamGia, ThanhTien, PhuongThucThanhToan, TrangThai)
+       VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, 'Đã thanh toán')`,
+      [
+        maBan || null,
+        maNhanVien || null,
+        maKhachHang || null,
+        subtotalVal,
+        discountVal,
+        finalAmount,
+        payMethod,
+      ]
+    );
+
+    const orderId = orderRes.insertId;
+
+    // 2. Lưu từng món vào bảng chitietdonhang
+    for (const item of items) {
+      const spId = item.maSanPham || item.id || null;
+      const tenMon = item.tenSanPham || item.name || "Món gọi";
+      const sl = Number(item.soLuong || item.quantity) || 1;
+      const gia = Number(item.donGia || item.price) || 0;
+      const tt = sl * gia;
+
+      await connection.query(
+        `INSERT INTO chitietdonhang (MaDonHang, MaSanPham, TenMon, SoLuong, DonGia, ThanhTien)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [orderId, spId, tenMon, sl, gia, tt]
+      );
+    }
+
+    // 3. Nếu có bàn, cập nhật bàn sang trạng thái có khách
+    if (maBan) {
+      try {
+        await connection.query(
+          "UPDATE bancafe SET TrangThai = 'CO_KHACH' WHERE MaBan = ?",
+          [maBan]
+        );
+      } catch (_) {}
+    }
+
+    // 4. ⚡ HOOK TÍCH ĐIỂM: Đơn hàng thanh toán tại quầy -> tự động cộng điểm
+    let pointsResult = null;
+    try {
+      pointsResult = await awardPointsOnPayment(connection, orderId);
+    } catch (ptErr) {
+      console.warn("Lỗi tích điểm checkout:", ptErr.message);
+    }
+
+    await connection.commit();
+
+    // 5. Emit realtime Socket.IO cho POS và Bếp
+    try {
+      io.emit("new_order", {
+        orderId,
+        maBan,
+        thanhTien: finalAmount,
+        trangThai: "Đã thanh toán",
+      });
+      if (maBan) {
+        io.emit("table_status_changed", { tableId: maBan, status: "occupied" });
+      }
+    } catch (_) {}
+
+    return res.status(201).json({
+      success: true,
+      message: "Thanh toán đơn hàng thành công!",
+      maDonHang: orderId,
+      orderId,
+      data: {
+        maDonHang: orderId,
+        thanhTien: finalAmount,
+        trangThai: "Đã thanh toán",
+      },
+      pointsAwarded: pointsResult
+        ? {
+            diem: pointsResult.pointsEarned,
+            tongDiem: pointsResult.diemSauKhi,
+          }
+        : null,
+    });
+  } catch (err) {
+    await connection.rollback();
+    console.error("Lỗi checkout đơn hàng:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi lưu đơn hàng: " + err.message,
+    });
+  } finally {
+    connection.release();
+  }
+});
+
+// ==========================================
+// 2.2 API SƠ ĐỒ BÀN (TABLES)
+// ==========================================
+
+// [GET] Danh sách tất cả bàn
+app.get("/api/tables", async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT MaBan, TenBan, TrangThai, SoChoNgoi, MaKhuVuc FROM bancafe ORDER BY MaBan ASC"
+    );
+    res.json(rows);
+  } catch (err) {
+    // Nếu bảng chưa có, fallback mảng rỗng để không crash FE
+    res.json([]);
+  }
+});
+
+// [PATCH / PUT] Đổi trạng thái bàn
+app.patch(["/api/tables/:id/status", "/api/tables/:id"], async (req, res) => {
+  try {
+    const tableId = req.params.id;
+    const { trangThai, status } = req.body;
+    const newStatus = trangThai || status || "TRONG";
+
+    await db.query("UPDATE bancafe SET TrangThai = ? WHERE MaBan = ?", [
+      newStatus,
+      tableId,
+    ]);
+
+    // Socket realtime đồng bộ cho toàn bộ nhân viên phục vụ / thu ngân
+    io.emit("table_status_changed", { tableId, status: newStatus });
+
+    res.json({
+      success: true,
+      message: "Cập nhật trạng thái bàn thành công!",
+      tableId,
+      status: newStatus,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ==========================================
 // 3. API DANH MỤC (CATEGORIES)
 // ==========================================
 
@@ -670,25 +869,102 @@ app.delete("/api/categories/:id", async (req, res) => {
 // 4. API SẢN PHẨM / ĐỒ UỐNG (PRODUCTS)
 // ==========================================
 
-// [GET] Lấy danh sách đồ uống
+// Đảm bảo bảng sanpham có cột is_active (1: Còn hàng, 0: Hết hàng) và HinhAnh
+(async () => {
+  try {
+    const [cols] = await db.query("SHOW COLUMNS FROM sanpham LIKE 'is_active'");
+    if (cols.length === 0) {
+      await db.query("ALTER TABLE sanpham ADD COLUMN is_active TINYINT DEFAULT 1");
+      console.log("✅ Đã tự động thêm cột is_active vào bảng sanpham");
+    }
+  } catch (e) {
+    console.warn("Lưu ý migration cột is_active sanpham:", e.message);
+  }
+  try {
+    const [hinhAnhCols] = await db.query("SHOW COLUMNS FROM sanpham LIKE 'HinhAnh'");
+    if (hinhAnhCols.length === 0) {
+      await db.query("ALTER TABLE sanpham ADD COLUMN HinhAnh VARCHAR(500) DEFAULT NULL");
+      console.log("✅ Đã tự động thêm cột HinhAnh vào bảng sanpham");
+    }
+  } catch (e) {
+    console.warn("Lưu ý migration cột HinhAnh sanpham:", e.message);
+  }
+})();
+
+// [GET] Lấy danh sách đồ uống (hỗ trợ lọc danh mục & lọc món còn hàng cho máy POS)
 app.get("/api/products", async (req, res) => {
   try {
-    const { maDanhMuc } = req.query;
+    const { maDanhMuc, availableOnly, is_active } = req.query;
     let sql = `
       SELECT 
-        sp.MaSanPham, sp.TenSanPham, sp.Gia, sp.MoTa, sp.CoBan,
+        sp.MaSanPham, sp.TenSanPham, sp.Gia, sp.MoTa, sp.HinhAnh, sp.CoBan,
+        COALESCE(sp.is_active, 1) AS is_active,
         sp.MaDanhMuc, dm.TenDanhMuc
       FROM sanpham sp
       LEFT JOIN danhmuc dm ON sp.MaDanhMuc = dm.MaDanhMuc
+      WHERE 1=1
     `;
     const params = [];
     if (maDanhMuc) {
-      sql += " WHERE sp.MaDanhMuc = ?";
+      sql += " AND sp.MaDanhMuc = ?";
       params.push(maDanhMuc);
+    }
+    // Lọc chỉ món còn hàng cho máy POS
+    if (availableOnly === "true" || availableOnly === "1" || is_active === "1") {
+      sql += " AND (sp.is_active = 1 OR sp.is_active IS NULL)";
+    } else if (is_active === "0") {
+      sql += " AND sp.is_active = 0";
     }
     sql += " ORDER BY sp.MaSanPham DESC";
     const [rows] = await db.query(sql, params);
     res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi MySQL: " + err.message });
+  }
+});
+
+// [PATCH] Cập nhật trạng thái Còn hàng / Hết hàng (Nút gạt Toggle)
+app.patch("/api/products/:id/status", async (req, res) => {
+  try {
+    const { id } = req.params;
+    let { is_active } = req.body;
+
+    if (is_active === undefined || is_active === null) {
+      const [current] = await db.query(
+        "SELECT COALESCE(is_active, 1) AS is_active FROM sanpham WHERE MaSanPham = ?",
+        [id]
+      );
+      if (current.length === 0) {
+        return res.status(404).json({ message: "Không tìm thấy sản phẩm!" });
+      }
+      is_active = current[0].is_active === 1 ? 0 : 1;
+    } else {
+      is_active = Number(is_active) === 1 ? 1 : 0;
+    }
+
+    const [result] = await db.query(
+      "UPDATE sanpham SET is_active = ? WHERE MaSanPham = ?",
+      [is_active, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Không tìm thấy sản phẩm để cập nhật!" });
+    }
+
+    // Gửi thông báo realtime qua Socket.IO tới các máy POS đang mở
+    try {
+      req.app.get("io")?.emit("product_status_changed", {
+        productId: Number(id),
+        is_active,
+      });
+    } catch (e) {}
+
+    res.json({
+      success: true,
+      message: `Đã chuyển trạng thái món sang "${is_active === 1 ? "Còn hàng" : "Hết hàng"}"`,
+      id: Number(id),
+      is_active,
+    });
   } catch (err) {
     res.status(500).json({ message: "Lỗi MySQL: " + err.message });
   }
@@ -714,18 +990,38 @@ app.get("/api/products/:id", async (req, res) => {
   }
 });
 
+// [POST] Upload ảnh sản phẩm — nhận file multipart, trả về URL
+app.post("/api/products/upload-image", (req, res) => {
+  uploadProductImage.single("image")(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message });
+    }
+    if (!req.file) {
+      return res.status(400).json({ message: "Không có file nào được tải lên!" });
+    }
+    // Trả về đường dẫn public để FE dùng
+    const imageUrl = `/uploads/products/${req.file.filename}`;
+    res.json({
+      success: true,
+      imageUrl,
+      filename: req.file.filename,
+      message: "Upload ảnh thành công!",
+    });
+  });
+});
+
 // [POST] Thêm mới sản phẩm/đồ uống
 app.post("/api/products", async (req, res) => {
   try {
-    const { tenSanPham, gia, moTa, coBan, maDanhMuc } = req.body;
+    const { tenSanPham, gia, moTa, coBan, maDanhMuc, hinhAnh } = req.body;
     if (!tenSanPham || gia === undefined) {
       return res
         .status(400)
         .json({ message: "Vui lòng nhập Tên và Giá sản phẩm!" });
     }
     const [result] = await db.query(
-      "INSERT INTO sanpham (TenSanPham, Gia, MoTa, CoBan, MaDanhMuc) VALUES (?, ?, ?, ?, ?)",
-      [tenSanPham, gia, moTa || null, coBan ? 1 : 0, maDanhMuc || null],
+      "INSERT INTO sanpham (TenSanPham, Gia, MoTa, CoBan, MaDanhMuc, HinhAnh) VALUES (?, ?, ?, ?, ?, ?)",
+      [tenSanPham, gia, moTa || null, coBan ? 1 : 0, maDanhMuc || null, hinhAnh || null],
     );
     res
       .status(201)
@@ -739,16 +1035,22 @@ app.post("/api/products", async (req, res) => {
 app.put("/api/products/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenSanPham, gia, moTa, coBan, maDanhMuc } = req.body;
+    const { tenSanPham, gia, moTa, coBan, maDanhMuc, hinhAnh } = req.body;
     if (!tenSanPham || gia === undefined) {
       return res
         .status(400)
         .json({ message: "Vui lòng nhập Tên và Giá sản phẩm!" });
     }
-    const [result] = await db.query(
-      "UPDATE sanpham SET TenSanPham = ?, Gia = ?, MoTa = ?, CoBan = ?, MaDanhMuc = ? WHERE MaSanPham = ?",
-      [tenSanPham, gia, moTa || null, coBan ? 1 : 0, maDanhMuc || null, id],
-    );
+    // Nếu không truyền hinhAnh mới, giữ nguyên ảnh cũ trong DB
+    let sql, params;
+    if (hinhAnh !== undefined) {
+      sql = "UPDATE sanpham SET TenSanPham = ?, Gia = ?, MoTa = ?, CoBan = ?, MaDanhMuc = ?, HinhAnh = ? WHERE MaSanPham = ?";
+      params = [tenSanPham, gia, moTa || null, coBan ? 1 : 0, maDanhMuc || null, hinhAnh || null, id];
+    } else {
+      sql = "UPDATE sanpham SET TenSanPham = ?, Gia = ?, MoTa = ?, CoBan = ?, MaDanhMuc = ? WHERE MaSanPham = ?";
+      params = [tenSanPham, gia, moTa || null, coBan ? 1 : 0, maDanhMuc || null, id];
+    }
+    const [result] = await db.query(sql, params);
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "Không tìm thấy sản phẩm!" });
     }
