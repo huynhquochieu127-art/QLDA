@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:payroll": "playwright test shift-and-payroll.spec.js --headed"
+  },
   "devDependencies": {
     "@playwright/test": "^1.63.0"
   }
