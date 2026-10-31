@@ -78,7 +78,7 @@ class _ServerConfigDialogState extends State<ServerConfigDialog> {
                   TextField(
                     controller: _controller,
                     decoration: InputDecoration(
-                      hintText: 'http://10.0.2.2:5000/api',
+                      hintText: 'https://quan-ly-ca-phe.onrender.com/api',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
@@ -91,9 +91,10 @@ class _ServerConfigDialogState extends State<ServerConfigDialog> {
                     runSpacing: 8,
                     children: [
                       ActionChip(
-                        avatar: const Icon(Icons.phone_android, size: 16),
-                        label: const Text('Máy ảo Android (10.0.2.2)'),
-                        onPressed: () => _controller.text = 'http://10.0.2.2:5000/api',
+                        avatar: const Icon(Icons.cloud_done, size: 16, color: Colors.green),
+                        backgroundColor: Colors.green[50],
+                        label: const Text('Render Online (Đồng bộ Web)', style: TextStyle(fontWeight: FontWeight.bold)),
+                        onPressed: () => _controller.text = 'https://quan-ly-ca-phe.onrender.com/api',
                       ),
                       ActionChip(
                         avatar: const Icon(Icons.wifi, size: 16),
@@ -101,9 +102,9 @@ class _ServerConfigDialogState extends State<ServerConfigDialog> {
                         onPressed: () => _controller.text = 'http://192.168.1.15:5000/api',
                       ),
                       ActionChip(
-                        avatar: const Icon(Icons.computer, size: 16),
-                        label: const Text('Localhost (5000)'),
-                        onPressed: () => _controller.text = 'http://localhost:5000/api',
+                        avatar: const Icon(Icons.phone_android, size: 16),
+                        label: const Text('Máy ảo Android (10.0.2.2)'),
+                        onPressed: () => _controller.text = 'http://10.0.2.2:5000/api',
                       ),
                     ],
                   ),

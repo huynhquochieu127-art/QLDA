@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
@@ -8,9 +7,8 @@ import '../models/product.dart';
 import '../models/discount.dart';
 
 class ApiService {
-  // Địa chỉ IP Wi-Fi của máy tính đang chạy Backend
-  static const String _defaultAndroidUrl = 'http://192.168.1.15:5000/api';
-  static const String _defaultOtherUrl = 'http://localhost:5000/api';
+  // Đường dẫn Backend Render Online chính thức đồng bộ 100% cùng Web
+  static const String _defaultOnlineUrl = 'https://quan-ly-ca-phe.onrender.com/api';
   static const String _prefBaseUrlKey = 'custom_api_base_url';
 
   static String? _cachedBaseUrl;
@@ -23,15 +21,8 @@ class ApiService {
       _cachedBaseUrl = saved.trim().replaceAll(RegExp(r'/+$'), '');
       return _cachedBaseUrl!;
     }
-    try {
-      if (Platform.isAndroid) {
-        _cachedBaseUrl = _defaultAndroidUrl;
-      } else {
-        _cachedBaseUrl = _defaultOtherUrl;
-      }
-    } catch (_) {
-      _cachedBaseUrl = _defaultOtherUrl;
-    }
+    // Mặc định kết nối trực tiếp vào Render Online đồng bộ cùng Web
+    _cachedBaseUrl = _defaultOnlineUrl;
     return _cachedBaseUrl!;
   }
 
