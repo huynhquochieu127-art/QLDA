@@ -180,12 +180,12 @@ class ApiService {
     }
     final url = Uri.parse('$baseUrl/products$query');
     try {
-      final res = await http.get(url).timeout(const Duration(seconds: 10));
+      final res = await http.get(url).timeout(const Duration(seconds: 12));
       if (res.statusCode == 200) {
         final list = jsonDecode(utf8.decode(res.bodyBytes));
         if (list is List) {
-          final items = list.map((e) => ProductModel.fromJson(e));
-          return availableOnly ? items.where((p) => p.isAvailable).toList() : items.toList();
+          final items = list.map((e) => ProductModel.fromJson(e)).toList();
+          return availableOnly ? items.where((p) => p.isAvailable).toList() : items;
         }
       }
     } catch (_) {}

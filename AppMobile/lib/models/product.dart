@@ -18,14 +18,25 @@ class ProductModel {
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
+    final rawPrice = json['Gia'] ?? json['price'] ?? 0;
+    final parsedPrice = rawPrice is num
+        ? rawPrice.toDouble()
+        : double.tryParse(rawPrice.toString()) ?? 0.0;
+
+    final rawActive = json['is_active'] ?? json['isActive'] ?? 1;
+    final parsedActive = rawActive == 1 || rawActive == true || rawActive == '1';
+
+    final idVal = json['MaSanPham'] ?? json['id'] ?? 0;
+    final catIdVal = json['MaDanhMuc'] ?? json['categoryId'] ?? 1;
+
     return ProductModel(
-      id: json['MaSanPham'] ?? json['id'] ?? 0,
-      name: json['TenSanPham'] ?? json['name'] ?? '',
-      price: (json['Gia'] ?? json['price'] ?? 0).toDouble(),
-      image: json['HinhAnh'] ?? json['image'] ?? '',
-      categoryId: json['MaDanhMuc'] ?? json['categoryId'] ?? 1,
-      categoryName: json['TenDanhMuc'] ?? json['categoryName'] ?? 'Đồ uống',
-      isAvailable: (json['is_active'] ?? 1) != 0,
+      id: idVal is int ? idVal : int.tryParse(idVal.toString()) ?? 0,
+      name: (json['TenSanPham'] ?? json['name'] ?? '').toString(),
+      price: parsedPrice,
+      image: (json['HinhAnh'] ?? json['image'] ?? '').toString(),
+      categoryId: catIdVal is int ? catIdVal : int.tryParse(catIdVal.toString()) ?? 1,
+      categoryName: (json['TenDanhMuc'] ?? json['categoryName'] ?? 'Đồ uống').toString(),
+      isAvailable: parsedActive,
     );
   }
 
