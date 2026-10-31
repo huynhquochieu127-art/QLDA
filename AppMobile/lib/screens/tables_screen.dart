@@ -614,6 +614,8 @@ class _TablesScreenState extends State<TablesScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         onSelected: (_) => provider.selectArea(areaId),
       ),
+      //nguyen hai hau
+      
     );
   }
 }
