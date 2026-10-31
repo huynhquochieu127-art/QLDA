@@ -1,6 +1,7 @@
 {
   "type": "module",
   "dependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
     "axios": "^1.20.0",
     "bootstrap": "^5.3.8",
     "exceljs": "^4.4.0",
@@ -11,15 +12,12 @@
     "react-router-dom": "^7.18.4",
     "react-scripts": "^5.0.1",
     "recharts": "^3.10.1",
-    "socket.io-client": "^4.8.4"
+    "socket.io-client": "^4.8.4",
+    "vite": "^8.3.0"
   },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^6.1.1",
-    "vite": "^8.3.0"
   }
 }
