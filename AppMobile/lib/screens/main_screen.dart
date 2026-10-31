@@ -14,6 +14,15 @@ import 'customers_screen.dart';
 import 'discounts_screen.dart';
 import 'leave_requests_screen.dart';
 import 'employees_screen.dart';
+import 'my_timesheet_screen.dart';
+import 'payslip_screen.dart';
+import 'notifications_screen.dart';
+import 'attendance_management_screen.dart';
+import 'shift_approval_screen.dart';
+import 'payroll_screen.dart';
+import 'staff_monitor_screen.dart';
+import 'revenue_period_screen.dart';
+import 'categories_screen.dart';
 import 'login_screen.dart';
 import '../widgets/server_config_dialog.dart';
 
@@ -167,6 +176,8 @@ class _MainScreenState extends State<MainScreen> {
         foregroundColor: Colors.white,
         elevation: 1,
         actions: [
+          // Chuông thông báo (giống Web NotificationBell)
+          const NotificationBellButton(),
           // Nút giỏ hàng nhanh ở góc trên
           Stack(
             alignment: Alignment.center,
@@ -243,6 +254,33 @@ class _MainScreenState extends State<MainScreen> {
                         Navigator.push(context, MaterialPageRoute(builder: (_) => const RevenueReportScreen()));
                       },
                     ),
+                  if (user?.canViewDashboard == true)
+                    ListTile(
+                      leading: const Icon(Icons.monitor_heart, color: Colors.brown),
+                      title: const Text('Giám sát kỷ luật & Trực quầy'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const StaffMonitorScreen()));
+                      },
+                    ),
+                  if (user?.canViewRevenue == true)
+                    ListTile(
+                      leading: const Icon(Icons.bar_chart, color: Colors.brown),
+                      title: const Text('Báo cáo doanh thu Tuần / Tháng'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const RevenuePeriodScreen()));
+                      },
+                    ),
+                  if (user?.canManageCategories == true)
+                    ListTile(
+                      leading: const Icon(Icons.category, color: Colors.brown),
+                      title: const Text('Quản lý Danh mục'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const CategoriesScreen()));
+                      },
+                    ),
                   if (user?.canViewTables == true)
                     ListTile(
                       leading: const Icon(Icons.table_restaurant, color: Colors.brown),
@@ -296,6 +334,58 @@ class _MainScreenState extends State<MainScreen> {
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const TimekeepingScreen()));
+                    },
+                  ),
+                  if (user?.isAdmin != true)
+                    ListTile(
+                      leading: const Icon(Icons.fact_check, color: Colors.brown),
+                      title: const Text('Bảng công của tôi'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const MyTimesheetScreen()));
+                      },
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.receipt, color: Colors.brown),
+                    title: const Text('Phiếu lương'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const PayslipScreen()));
+                    },
+                  ),
+                  if (user?.canViewAllTimekeeping == true)
+                    ListTile(
+                      leading: const Icon(Icons.how_to_reg, color: Colors.brown),
+                      title: const Text('Điểm danh & Chấm công (Quản lý)'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendanceManagementScreen()));
+                      },
+                    ),
+                  if (user?.canApproveLeave == true)
+                    ListTile(
+                      leading: const Icon(Icons.calendar_month, color: Colors.brown),
+                      title: const Text('Duyệt ca làm & Lịch trình'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ShiftApprovalScreen()));
+                      },
+                    ),
+                  if (user?.canViewDashboard == true)
+                    ListTile(
+                      leading: const Icon(Icons.payments, color: Colors.brown),
+                      title: const Text('Bảng lương & Quyết toán'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const PayrollScreen()));
+                      },
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.notifications, color: Colors.brown),
+                    title: const Text('Thông báo'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
                     },
                   ),
                   ListTile(

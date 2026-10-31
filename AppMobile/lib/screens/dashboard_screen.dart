@@ -10,6 +10,15 @@ import 'discounts_screen.dart';
 import 'leave_requests_screen.dart';
 import 'employees_screen.dart';
 import 'timekeeping_screen.dart';
+import 'my_timesheet_screen.dart';
+import 'payslip_screen.dart';
+import 'notifications_screen.dart';
+import 'attendance_management_screen.dart';
+import 'shift_approval_screen.dart';
+import 'payroll_screen.dart';
+import 'staff_monitor_screen.dart';
+import 'revenue_period_screen.dart';
+import 'categories_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -165,6 +174,85 @@ class DashboardScreen extends StatelessWidget {
                   color: const Color(0xFF5D4037),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TimekeepingScreen())),
                 ),
+                if (user?.isAdmin != true)
+                  _buildFeatureCard(
+                    context,
+                    title: 'Bảng Công Của Tôi',
+                    subtitle: 'Xác nhận / Báo sai sót',
+                    icon: Icons.fact_check,
+                    color: Colors.teal.shade700,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MyTimesheetScreen())),
+                  ),
+                _buildFeatureCard(
+                  context,
+                  title: 'Phiếu Lương',
+                  subtitle: 'Thu nhập & thực lĩnh',
+                  icon: Icons.receipt,
+                  color: Colors.green.shade700,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PayslipScreen())),
+                ),
+                _buildFeatureCard(
+                  context,
+                  title: 'Thông Báo',
+                  subtitle: 'Tin nhắn từ hệ thống',
+                  icon: Icons.notifications_none,
+                  color: Colors.redAccent,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+                ),
+                if (user?.canViewDashboard == true)
+                  _buildFeatureCard(
+                    context,
+                    title: 'Giám Sát Trực Quầy',
+                    subtitle: 'Đi trễ & doanh thu hôm nay',
+                    icon: Icons.monitor_heart,
+                    color: Colors.blueGrey.shade700,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StaffMonitorScreen())),
+                  ),
+                if (user?.canViewRevenue == true)
+                  _buildFeatureCard(
+                    context,
+                    title: 'Doanh Thu Tuần/Tháng',
+                    subtitle: 'Biểu đồ theo ngày',
+                    icon: Icons.bar_chart,
+                    color: Colors.indigo.shade400,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RevenuePeriodScreen())),
+                  ),
+                if (user?.canViewAllTimekeeping == true)
+                  _buildFeatureCard(
+                    context,
+                    title: 'Điểm Danh & Chấm Công',
+                    subtitle: 'Duyệt bổ sung · Bảng công tháng',
+                    icon: Icons.how_to_reg,
+                    color: Colors.cyan.shade800,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendanceManagementScreen())),
+                  ),
+                if (user?.canApproveLeave == true)
+                  _buildFeatureCard(
+                    context,
+                    title: 'Duyệt Ca Làm',
+                    subtitle: 'Lịch đăng ký theo tuần',
+                    icon: Icons.calendar_month,
+                    color: Colors.orange.shade800,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShiftApprovalScreen())),
+                  ),
+                if (user?.canViewDashboard == true)
+                  _buildFeatureCard(
+                    context,
+                    title: 'Bảng Lương',
+                    subtitle: 'Tính lương & quyết toán',
+                    icon: Icons.payments,
+                    color: Colors.brown,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PayrollScreen())),
+                  ),
+                if (user?.canManageCategories == true)
+                  _buildFeatureCard(
+                    context,
+                    title: 'Danh Mục',
+                    subtitle: 'Thêm / sửa / xóa',
+                    icon: Icons.category,
+                    color: Colors.pink.shade400,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CategoriesScreen())),
+                  ),
                 if (user?.canManageEmployees == true)
                   _buildFeatureCard(
                     context,
