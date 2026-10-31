@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../providers/table_provider.dart';
 import '../services/api_service.dart';
 import '../utils/formatters.dart';
+import '../widgets/pos_suggestions.dart';
 import 'customers_screen.dart';
 import 'discounts_screen.dart';
 
@@ -278,6 +279,9 @@ class _CartScreenState extends State<CartScreen> {
                       );
                     },
                   ),
+
+                  // Món gọi kèm gợi ý (QH-95)
+                  const PosSuggestions(),
 
                   const SizedBox(height: 16),
 
