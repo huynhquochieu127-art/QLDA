@@ -28,4 +28,24 @@ class ProductModel {
       isAvailable: (json['is_active'] ?? 1) != 0,
     );
   }
+
+  ProductModel copyWith({
+    int? id,
+    String? name,
+    double? price,
+    String? image,
+    int? categoryId,
+    String? categoryName,
+    bool? isAvailable,
+  }) {
+    return ProductModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      price: price ?? this.price,
+      image: image ?? this.image,
+      categoryId: categoryId ?? this.categoryId,
+      categoryName: categoryName ?? this.categoryName,
+      isAvailable: isAvailable ?? this.isAvailable,
+    );
+  }
 }

@@ -31,6 +31,9 @@ class CartProvider extends ChangeNotifier {
   double get discountAmount => _appliedDiscount?.discountAmount ?? 0.0;
 
   double get finalTotal => max(0.0, subtotal - discountAmount);
+  double get total => finalTotal;
+
+  int getItemQuantity(int productId) => _items[productId]?.quantity ?? 0;
 
   void setTable(TableModel? table) {
     _selectedTable = table;

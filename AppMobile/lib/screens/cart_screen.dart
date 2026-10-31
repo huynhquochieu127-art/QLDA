@@ -5,6 +5,8 @@ import '../providers/auth_provider.dart';
 import '../providers/table_provider.dart';
 import '../services/api_service.dart';
 import '../utils/formatters.dart';
+import 'customers_screen.dart';
+import 'discounts_screen.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -277,7 +279,91 @@ class _CartScreenState extends State<CartScreen> {
                     },
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+
+                  // Khách hàng thân thiết & Tích điểm
+                  Card(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(Icons.person_pin, color: Colors.purple, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Khách Hàng & Tích Điểm', style: TextStyle(fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                              TextButton.icon(
+                                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                                icon: const Icon(Icons.people_alt, size: 16),
+                                label: Text(cart.customerId != null ? 'Đổi khách' : 'Chọn khách'),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => CustomersScreen(
+                                        onSelectCustomer: (cust) {
+                                          cart.setCustomer(
+                                            id: cust.id,
+                                            phone: cust.phone,
+                                            points: cust.points,
+                                          );
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Đã chọn khách: ${cust.name} (${cust.rank})'),
+                                              backgroundColor: Colors.green,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                          if (cart.customerId != null)
+                            Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.purple.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('SĐT: ${cart.customerPhone ?? ""}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      Text('Điểm tích lũy: ${cart.customerPoints} điểm', style: const TextStyle(fontSize: 12, color: Colors.purple)),
+                                    ],
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 18, color: Colors.red),
+                                    onPressed: () => cart.clearCustomer(),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            const Padding(
+                              padding: EdgeInsets.only(top: 4),
+                              child: Text('Chưa chọn khách hàng (sẽ thanh toán vãng lai)', style: TextStyle(color: Colors.black54, fontSize: 12)),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
 
                   // Ô nhập mã giảm giá Voucher
                   Card(
@@ -287,11 +373,31 @@ class _CartScreenState extends State<CartScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Row(
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Icon(Icons.confirmation_number_outlined, color: Colors.orange, size: 20),
-                              SizedBox(width: 8),
-                              Text('Mã Giảm Giá (Voucher)', style: TextStyle(fontWeight: FontWeight.bold)),
+                              const Row(
+                                children: [
+                                  Icon(Icons.confirmation_number_outlined, color: Colors.orange, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Mã Giảm Giá (Voucher)', style: TextStyle(fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                              TextButton.icon(
+                                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                                icon: const Icon(Icons.local_offer, size: 16),
+                                label: const Text('Xem tất cả mã'),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => DiscountsScreen(
+                                        onSelectCode: (code) => _applyVoucher(code),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                             ],
                           ),
                           const SizedBox(height: 10),
@@ -351,6 +457,7 @@ class _CartScreenState extends State<CartScreen> {
                       ),
                     ),
                   ),
+
 
                   const SizedBox(height: 20),
 
