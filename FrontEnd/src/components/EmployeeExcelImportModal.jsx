@@ -11,8 +11,7 @@ import {
   AlertCircle,
   FileCheck,
 } from "lucide-react";
-
-const API_BASE = "http://localhost:5000/api";
+import { API_BASE } from "../config/api";
 
 export default function EmployeeExcelImportModal({ isOpen, onClose, onSuccess }) {
   const [selectedFile, setSelectedFile] = useState(null);

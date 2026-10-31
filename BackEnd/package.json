@@ -1,4 +1,11 @@
 {
+  "name": "quan-ly-cf-backend",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "nodemon index.js",
+    "start": "node index.js",
+    "build": "cd ../FrontEnd && npm install && npm run build"
+  },
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
@@ -12,9 +19,5 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
-  },
-  "scripts": {
-    "dev": "nodemon index.js",
-    "start": "node index.js"
   }
 }

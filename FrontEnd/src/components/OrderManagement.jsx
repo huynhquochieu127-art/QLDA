@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Search,
 } from "lucide-react";
+import { API_BASE } from "../config/api";
 
 export default function OrderManagement() {
   const [orders, setOrders] = useState([]);
@@ -19,7 +20,7 @@ export default function OrderManagement() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:5000/api/orders");
+      const response = await fetch(`${API_BASE}/orders`);
       if (!response.ok) throw new Error("Lỗi tải danh sách đơn hàng");
       const data = await response.json();
       setOrders(data);
@@ -41,7 +42,7 @@ export default function OrderManagement() {
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
       const response = await fetch(
-        `http://localhost:5000/api/orders/${orderId}/status`,
+        `${API_BASE}/orders/${orderId}/status`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },

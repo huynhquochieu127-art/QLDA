@@ -5,8 +5,7 @@
  */
 import { useEffect, useRef } from "react";
 import { io } from "socket.io-client";
-
-const SOCKET_URL = "http://localhost:5000";
+import { SOCKET_URL } from "../config/api";
 
 // Singleton socket - tránh tạo nhiều connection
 let socketInstance = null;

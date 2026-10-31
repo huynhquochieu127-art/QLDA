@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from "react";
 import MonthlyTimesheetManager from "./MonthlyTimesheetManager";
 import { CheckSquare, Calendar, Clock } from "lucide-react";
-
-// Đổi URL này theo cổng chạy Backend của bạn (VD: http://localhost:5000/api hoặc http://localhost:3000/api)
-const API_BASE_URL = "http://localhost:5000/api";
+import { API_BASE as API_BASE_URL } from "../config/api";
 
 const TimekeepingManagement = () => {
   const [activeModule, setActiveModule] = useState("monthly_timesheet"); // Mặc định mở Bảng công tháng QH-55

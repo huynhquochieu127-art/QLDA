@@ -1,16 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { Plus, Trash2, Edit, Loader2, X, Coffee, CheckCircle2, ImageIcon, UploadCloud } from "lucide-react";
+import { API_BASE, API_ORIGIN, getFullImageUrl } from "../config/api";
 
 const formatPrice = (p) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(p);
 
-const resolveProductImg = (url) => {
-  if (!url) return "";
-  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
-  if (url.startsWith("/")) return `http://localhost:5000${url}`;
-  return `http://localhost:5000/${url}`;
-};
+const resolveProductImg = (url) => getFullImageUrl(url);
 
 const EMPTY_FORM = {
   tenSanPham: "",
@@ -50,7 +46,7 @@ export default function ProductManagement({ currentRole }) {
   // Lấy danh sách danh mục (dùng cho dropdown)
   const fetchCategories = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/categories");
+      const res = await axios.get(`${API_BASE}/categories`);
       setCategories(res.data);
     } catch (e) {}
   };
@@ -61,7 +57,7 @@ export default function ProductManagement({ currentRole }) {
     setError("");
     try {
       const params = catId ? { maDanhMuc: catId } : {};
-      const res = await axios.get("http://localhost:5000/api/products", { params });
+      const res = await axios.get(`${API_BASE}/products`, { params });
       setProducts(res.data);
     } catch (e) {
       setError(e.response?.data?.message || e.message);
@@ -138,7 +134,7 @@ export default function ProductManagement({ currentRole }) {
       try {
         const fd = new FormData();
         fd.append("image", imageFile);
-        const uploadRes = await axios.post("http://localhost:5000/api/products/upload-image", fd, {
+        const uploadRes = await axios.post(`${API_BASE}/products/upload-image`, fd, {
           headers: { "Content-Type": "multipart/form-data" },
         });
         finalHinhAnh = uploadRes.data.imageUrl;
@@ -152,10 +148,10 @@ export default function ProductManagement({ currentRole }) {
     try {
       const payload = { ...form, hinhAnh: finalHinhAnh };
       if (editingProduct) {
-        await axios.put(`http://localhost:5000/api/products/${editingProduct.MaSanPham}`, payload);
+        await axios.put(`${API_BASE}/products/${editingProduct.MaSanPham}`, payload);
         alert("Cập nhật thành công!");
       } else {
-        const res = await axios.post("http://localhost:5000/api/products", payload);
+        const res = await axios.post(`${API_BASE}/products`, payload);
         setNotice(`Đã thêm món mới "${form.tenSanPham.trim()}" vào thực đơn.`);
         setHighlightId(res.data?.id ?? null);
         setTimeout(() => setHighlightId(null), 4000);
@@ -170,7 +166,7 @@ export default function ProductManagement({ currentRole }) {
   const handleDelete = async (id, name) => {
     if (!window.confirm(`Bạn có chắc muốn xóa "${name}" không?`)) return;
     try {
-      await axios.delete(`http://localhost:5000/api/products/${id}`);
+      await axios.delete(`${API_BASE}/products/${id}`);
       alert("Xóa thành công!");
       fetchProducts(filterCat);
     } catch (e) {
@@ -196,7 +192,7 @@ export default function ProductManagement({ currentRole }) {
 
     try {
       await axios.patch(
-        `http://localhost:5000/api/products/${product.MaSanPham}/status`,
+        `${API_BASE}/products/${product.MaSanPham}/status`,
         { is_active: newStatus }
       );
       setNotice(

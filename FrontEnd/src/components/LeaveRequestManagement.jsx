@@ -19,8 +19,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import "../../css/leave_requests.css";
-
-const API_BASE = "http://localhost:5000/api";
+import { API_BASE } from "../config/api";
 
 export default function LeaveRequestManagement({
   currentRole = "manager",

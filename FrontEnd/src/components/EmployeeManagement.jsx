@@ -31,8 +31,7 @@ import {
 } from "lucide-react";
 import { EmployeeDetailModal, EmployeeEditModal } from "./EmployeeActionModals";
 import EmployeeExcelImportModal from "./EmployeeExcelImportModal";
-
-const API_BASE = "http://localhost:5000/api";
+import { API_BASE } from "../config/api";
 
 const INITIAL_FORM = {
   hoTen: "",

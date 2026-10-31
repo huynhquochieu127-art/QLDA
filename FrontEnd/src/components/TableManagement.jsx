@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import "../../css/tables.css";
 import { useTableSocket } from "../hooks/useTableSocket";
+import { API_BASE } from "../config/api";
 import {
   Grid,
   Plus,
@@ -138,7 +139,7 @@ export default function TableManagement({ currentRole = "admin", onSelectTableFo
 
   // ── Load bàn từ API lần đầu (đồng bộ với Database) ─────────────────────────
   useEffect(() => {
-    fetch("http://localhost:5000/api/tables")
+    fetch(`${API_BASE}/tables`)
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {

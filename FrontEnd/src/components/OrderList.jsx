@@ -1,6 +1,6 @@
-// src/components/OrderList.jsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { API_BASE } from "../config/api";
 
 const STATUS_LABELS = {
   PENDING: { label: "Mới tạo", color: "bg-gray-200 text-gray-800" },
@@ -16,7 +16,7 @@ export default function OrderList() {
   // Hàm gọi API lấy danh sách đơn hàng
   const fetchOrders = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/orders");
+      const res = await axios.get(`${API_BASE}/orders`);
       setOrders(res.data);
     } catch (err) {
       console.error("Lỗi tải danh sách đơn hàng", err);
@@ -30,7 +30,7 @@ export default function OrderList() {
   // Hàm cập nhật trạng thái xuống CSDL
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
-      await axios.patch(`http://localhost:5000/api/orders/${orderId}/status`, {
+      await axios.patch(`${API_BASE}/orders/${orderId}/status`, {
         status: newStatus,
       });
       // Cập nhật lại UI sau khi lưu thành công

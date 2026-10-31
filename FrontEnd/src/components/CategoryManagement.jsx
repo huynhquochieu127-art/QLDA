@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Plus, Trash2, Edit, Loader2, X } from "lucide-react";
 import "../../css/home.css"; 
+import { API_BASE } from "../config/api"; 
 
 export default function CategoryManagement({ currentRole }) {
   const [categories, setCategories] = useState([]);
@@ -15,7 +16,7 @@ export default function CategoryManagement({ currentRole }) {
   const fetchCategories = async () => {
     setLoading(true);
     try {
-      const res = await axios.get("http://localhost:5000/api/categories");
+      const res = await axios.get(`${API_BASE}/categories`);
       setCategories(res.data);
     } catch (err) {
       setError(err.response?.data?.message || err.message);
@@ -34,12 +35,12 @@ export default function CategoryManagement({ currentRole }) {
     
     try {
       if (editingCategory) {
-        await axios.put(`http://localhost:5000/api/categories/${editingCategory.MaDanhMuc}`, {
+        await axios.put(`${API_BASE}/categories/${editingCategory.MaDanhMuc}`, {
           tenDanhMuc: categoryName,
         });
         alert("Cập nhật thành công!");
       } else {
-        await axios.post("http://localhost:5000/api/categories", {
+        await axios.post(`${API_BASE}/categories`, {
           tenDanhMuc: categoryName,
         });
         alert("Thêm danh mục thành công!");
@@ -54,7 +55,7 @@ export default function CategoryManagement({ currentRole }) {
   const handleDelete = async (id) => {
     if (!window.confirm("Bạn có chắc muốn xóa danh mục này?")) return;
     try {
-      await axios.delete(`http://localhost:5000/api/categories/${id}`);
+      await axios.delete(`${API_BASE}/categories/${id}`);
       alert("Xóa thành công!");
       fetchCategories();
     } catch (err) {

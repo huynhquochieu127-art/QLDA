@@ -16,6 +16,7 @@ import {
   PlusCircle,
   MinusCircle,
 } from "lucide-react";
+import { API_BASE } from "../config/api";
 
 export default function CustomerManagement({ currentRole }) {
   const [customers, setCustomers] = useState([]);
@@ -39,7 +40,7 @@ export default function CustomerManagement({ currentRole }) {
   const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 5;
 
-  const API_URL = "http://localhost:5000/api/customers";
+  const API_URL = `${API_BASE}/customers`;
 
   const fetchCustomersFromMySQL = async (searchQuery = "", page = 1) => {
     setLoading(true);
