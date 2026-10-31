@@ -147,18 +147,31 @@ export default function Payslip() {
         { label: "Phụ cấp ăn ca", value: sample.mealAllowance },
       ];
 
+  const leavePenaltyDays = Number(realPayroll?.SoNgayNghiKhongPhep || 0);
+  const leavePenaltyValue = isPartTime ? 0 : leavePenaltyDays * dailyRate;
+  const latePenaltyValue = lateCount * LATE_PENALTY;
+
   const deductions = realPayroll
-    ? isPartTime
-      ? []
-      : Number(realPayroll.TienPhat || realPayroll.KhauTru || 0) > 0
-      ? [
-          {
-            label: "Phạt nghỉ không phép (QH-28)",
-            note: `${realPayroll.SoNgayNghiKhongPhep || 0} ngày nghỉ KP × ${formatMoney(dailyRate)}/ngày`,
-            value: Number(realPayroll.TienPhat || realPayroll.KhauTru),
-          },
-        ]
-      : []
+    ? [
+        ...(leavePenaltyValue > 0
+          ? [
+              {
+                label: "Phạt nghỉ không phép (QH-28)",
+                note: `${leavePenaltyDays} ngày nghỉ KP × ${formatMoney(dailyRate)}/ngày`,
+                value: leavePenaltyValue,
+              },
+            ]
+          : []),
+        ...(latePenaltyValue > 0
+          ? [
+              {
+                label: "Phạt đi trễ",
+                note: `${lateCount} lần × ${formatMoney(LATE_PENALTY)}`,
+                value: latePenaltyValue,
+              },
+            ]
+          : []),
+      ]
     : [
         { label: "Đi trễ", note: `${lateCount} lần × ${formatMoney(LATE_PENALTY)}`, value: lateCount * LATE_PENALTY },
         {
