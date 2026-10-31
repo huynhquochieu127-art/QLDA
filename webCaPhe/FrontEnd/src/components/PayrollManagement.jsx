@@ -101,7 +101,12 @@ export default function PayrollManagement() {
     }
   };
 
-  const isLocked = timesheetStatus?.isTimesheetLocked;
+  // MySQL trả SUM() về dạng chuỗi ("3") còn COUNT() là số (3) nên cờ isTimesheetLocked từ API
+  // luôn false; tự so sánh lại bằng số để biết bảng công đã chốt sổ đủ hay chưa.
+  const isLocked =
+    timesheetStatus?.isTimesheetLocked === true ||
+    (Number(timesheetStatus?.total) > 0 &&
+      Number(timesheetStatus?.lockedCount) === Number(timesheetStatus?.total));
 
   return (
     <div style={{ padding: "24px", fontFamily: "Inter, sans-serif" }}>
@@ -254,7 +259,7 @@ export default function PayrollManagement() {
         {/* NÚT TÍNH LƯƠNG TỰ ĐỘNG */}
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button
-            onClick={handleCalculatePayroll}
+            onClick={() => handleCalculatePayroll(false)}
             disabled={calculating || !isLocked}
             style={{
               padding: "12px 22px",
@@ -356,7 +361,7 @@ export default function PayrollManagement() {
             {isLocked ? (
               <div>
                 <p>Bảng công tháng này đã được Quản lý chốt sổ thành công!</p>
-                <button onClick={handleCalculatePayroll} disabled={calculating} style={{ ...btnPrimaryStyle, margin: "12px auto" }}>
+                <button onClick={() => handleCalculatePayroll(false)} disabled={calculating} style={{ ...btnPrimaryStyle, margin: "12px auto" }}>
                   <DollarSign size={15} /> Bấm vào đây để chạy tính lương tự động
                 </button>
               </div>
