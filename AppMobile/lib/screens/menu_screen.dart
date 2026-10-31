@@ -6,6 +6,7 @@ import '../providers/cart_provider.dart';
 import '../providers/auth_provider.dart';
 import '../utils/formatters.dart';
 import 'cart_screen.dart';
+import '../widgets/server_config_dialog.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
@@ -20,6 +21,7 @@ class _MenuScreenState extends State<MenuScreen> {
   int _selectedCategory = 0;
   bool _isLoading = true;
   String _searchQuery = '';
+  String _currentServerUrl = '';
   final _searchController = TextEditingController();
 
   @override
@@ -36,13 +38,15 @@ class _MenuScreenState extends State<MenuScreen> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
+    final baseUrl = await ApiService.getBaseUrl();
     final cats = await ApiService.getCategories();
     final prods = await ApiService.getProducts(
       categoryId: _selectedCategory == 0 ? null : _selectedCategory,
-      availableOnly: false, // Lấy toàn bộ để Barista / Quản lý kiểm soát tình trạng món
+      availableOnly: false,
     );
     if (mounted) {
       setState(() {
+        _currentServerUrl = baseUrl;
         _categories = cats;
         _products = prods;
         _isLoading = false;
@@ -115,32 +119,44 @@ class _MenuScreenState extends State<MenuScreen> {
       backgroundColor: const Color(0xFFF9F6F0),
       body: Column(
         children: [
-          // Thanh tìm kiếm
+          // Thanh tìm kiếm + Nút làm mới
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (val) => setState(() => _searchQuery = val),
-              decoration: InputDecoration(
-                hintText: 'Tìm kiếm món (Cà phê, trà, bánh...)',
-                prefixIcon: const Icon(Icons.search, color: Colors.brown),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 20),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (val) => setState(() => _searchQuery = val),
+                    decoration: InputDecoration(
+                      hintText: 'Tìm kiếm món (Cà phê, bánh, trà...)',
+                      prefixIcon: const Icon(Icons.search, color: Colors.brown),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 20),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  icon: const Icon(Icons.refresh, color: Color(0xFF5D4037)),
+                  tooltip: 'Tải lại dữ liệu',
+                  onPressed: _loadData,
+                ),
+              ],
             ),
           ),
 
@@ -187,174 +203,217 @@ class _MenuScreenState extends State<MenuScreen> {
               ),
             ),
 
-          // Lưới sản phẩm
+          // Lưới sản phẩm kèm kéo để làm mới (Pull-to-refresh)
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D4037)))
                 : _filteredProducts.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.coffee_outlined, size: 64, color: Colors.brown[200]),
-                            const SizedBox(height: 12),
-                            Text(
-                              _searchQuery.isNotEmpty
-                                  ? 'Không tìm thấy món phù hợp'
-                                  : 'Chưa có món trong danh mục này',
-                              style: TextStyle(color: Colors.brown[400], fontSize: 16),
+                    ? RefreshIndicator(
+                        onRefresh: _loadData,
+                        color: const Color(0xFF5D4037),
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          child: Container(
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 60),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.coffee_outlined, size: 68, color: Colors.brown[200]),
+                                const SizedBox(height: 14),
+                                Text(
+                                  _searchQuery.isNotEmpty
+                                      ? 'Không tìm thấy món phù hợp'
+                                      : 'Chưa có món nào hoặc chưa kết nối được máy chủ',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.brown[400], fontSize: 15, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Server: $_currentServerUrl',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.black45, fontSize: 11),
+                                ),
+                                const SizedBox(height: 18),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF5D4037),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  icon: const Icon(Icons.refresh, size: 18),
+                                  label: const Text('Tải lại thực đơn'),
+                                  onPressed: _loadData,
+                                ),
+                                const SizedBox(height: 8),
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF5D4037),
+                                    side: const BorderSide(color: Color(0xFF5D4037)),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  icon: const Icon(Icons.settings_ethernet, size: 16),
+                                  label: const Text('Cấu hình Server IP / Render'),
+                                  onPressed: () async {
+                                    await ServerConfigDialog.show(context);
+                                    _loadData();
+                                  },
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       )
-                    : GridView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 0.70,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        itemCount: _filteredProducts.length,
-                        itemBuilder: (context, index) {
-                          final product = _filteredProducts[index];
-                          final inCartCount = cart.getItemQuantity(product.id);
+                    : RefreshIndicator(
+                        onRefresh: _loadData,
+                        color: const Color(0xFF5D4037),
+                        child: GridView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            childAspectRatio: 0.70,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                          ),
+                          itemCount: _filteredProducts.length,
+                          itemBuilder: (context, index) {
+                            final product = _filteredProducts[index];
+                            final inCartCount = cart.getItemQuantity(product.id);
 
-                          return Card(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            elevation: 1.5,
-                            clipBehavior: Clip.antiAlias,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Ảnh món + Tag tình trạng món
-                                Expanded(
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      Container(
-                                        color: Colors.brown.shade50,
-                                        child: product.image.isNotEmpty &&
-                                                (product.image.startsWith('http://') ||
-                                                    product.image.startsWith('https://'))
-                                            ? Image.network(
-                                                product.image,
-                                                fit: BoxFit.cover,
-                                                errorBuilder: (context, error, stackTrace) =>
-                                                    const Icon(Icons.local_cafe, size: 48, color: Colors.brown),
-                                              )
-                                            : const Icon(Icons.local_cafe, size: 48, color: Colors.brown),
-                                      ),
-                                      if (!product.isAvailable)
+                            return Card(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              elevation: 1.5,
+                              clipBehavior: Clip.antiAlias,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Ảnh món + Tag tình trạng món
+                                  Expanded(
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
                                         Container(
-                                          color: Colors.black.withValues(alpha: 0.55),
-                                          alignment: Alignment.center,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: Colors.red.shade700,
-                                              borderRadius: BorderRadius.circular(6),
-                                            ),
-                                            child: const Text(
-                                              'HẾT HÀNG',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 11,
-                                                letterSpacing: 0.5,
-                                              ),
-                                            ),
-                                          ),
+                                          color: Colors.brown.shade50,
+                                          child: product.fullImageUrl.isNotEmpty
+                                              ? Image.network(
+                                                  product.fullImageUrl,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (context, error, stackTrace) =>
+                                                      const Icon(Icons.local_cafe, size: 48, color: Colors.brown),
+                                                )
+                                              : const Icon(Icons.local_cafe, size: 48, color: Colors.brown),
                                         ),
-                                      // Nút bật/tắt Còn món / Hết món cho Admin / Manager / Barista
-                                      if (canToggle)
-                                        Positioned(
-                                          top: 6,
-                                          right: 6,
-                                          child: GestureDetector(
-                                            onTap: () => _toggleProductStatus(product),
+                                        if (!product.isAvailable)
+                                          Container(
+                                            color: Colors.black.withValues(alpha: 0.55),
+                                            alignment: Alignment.center,
                                             child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                               decoration: BoxDecoration(
-                                                color: product.isAvailable ? Colors.green.shade800 : Colors.red.shade800,
-                                                borderRadius: BorderRadius.circular(12),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black.withValues(alpha: 0.3),
-                                                    blurRadius: 4,
-                                                  ),
-                                                ],
+                                                color: Colors.red.shade700,
+                                                borderRadius: BorderRadius.circular(6),
                                               ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    product.isAvailable ? Icons.check : Icons.block,
-                                                    size: 11,
-                                                    color: Colors.white,
-                                                  ),
-                                                  const SizedBox(width: 3),
-                                                  Text(
-                                                    product.isAvailable ? 'Còn' : 'Hết',
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 10,
-                                                    ),
-                                                  ),
-                                                ],
+                                              child: const Text(
+                                                'HẾT HÀNG',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 11,
+                                                  letterSpacing: 0.5,
+                                                ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(10),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        product.name,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        Formatters.formatCurrency(product.price),
-                                        style: TextStyle(
-                                          color: Colors.brown[800],
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      // Nút thêm món vào giỏ
-                                      SizedBox(
-                                        width: double.infinity,
-                                        height: 34,
-                                        child: !product.isAvailable
-                                            ? OutlinedButton(
-                                                style: OutlinedButton.styleFrom(
-                                                  foregroundColor: Colors.grey,
-                                                  side: BorderSide(color: Colors.grey.shade300),
-                                                  padding: EdgeInsets.zero,
+                                        // Nút bật/tắt Còn món / Hết món cho Admin / Manager / Barista
+                                        if (canToggle)
+                                          Positioned(
+                                            top: 6,
+                                            right: 6,
+                                            child: GestureDetector(
+                                              onTap: () => _toggleProductStatus(product),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: product.isAvailable ? Colors.green.shade800 : Colors.red.shade800,
+                                                  borderRadius: BorderRadius.circular(12),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black.withValues(alpha: 0.3),
+                                                      blurRadius: 4,
+                                                    ),
+                                                  ],
                                                 ),
-                                                onPressed: null,
-                                                child: const Text('Tạm ngưng', style: TextStyle(fontSize: 12)),
-                                              )
-                                            : inCartCount == 0
-                                                ? ElevatedButton.icon(
-                                                    style: ElevatedButton.styleFrom(
-                                                      backgroundColor: const Color(0xFF5D4037),
-                                                      foregroundColor: Colors.white,
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      product.isAvailable ? Icons.check : Icons.block,
+                                                      size: 11,
+                                                      color: Colors.white,
+                                                    ),
+                                                    const SizedBox(width: 3),
+                                                    Text(
+                                                      product.isAvailable ? 'Còn' : 'Hết',
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 10,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          product.name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          Formatters.formatCurrency(product.price),
+                                          style: TextStyle(
+                                            color: Colors.brown[800],
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        // Nút thêm món vào giỏ
+                                        SizedBox(
+                                          width: double.infinity,
+                                          height: 34,
+                                          child: !product.isAvailable
+                                              ? OutlinedButton(
+                                                  style: OutlinedButton.styleFrom(
+                                                    foregroundColor: Colors.grey,
+                                                    side: BorderSide(color: Colors.grey.shade300),
+                                                    padding: EdgeInsets.zero,
+                                                  ),
+                                                  onPressed: null,
+                                                  child: const Text('Tạm ngưng', style: TextStyle(fontSize: 12)),
+                                                )
+                                              : inCartCount == 0
+                                                  ? ElevatedButton.icon(
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor: const Color(0xFF5D4037),
+                                                        foregroundColor: Colors.white,
                                                       padding: EdgeInsets.zero,
                                                       shape: RoundedRectangleBorder(
                                                         borderRadius: BorderRadius.circular(8),
@@ -394,6 +453,7 @@ class _MenuScreenState extends State<MenuScreen> {
                           );
                         },
                       ),
+                    ),
           ),
         ],
       ),

@@ -22,8 +22,16 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_prefBaseUrlKey);
     if (saved != null && saved.trim().isNotEmpty) {
-      _cachedBaseUrl = saved.trim().replaceAll(RegExp(r'/+$'), '');
-      return _cachedBaseUrl!;
+      final clean = saved.trim().replaceAll(RegExp(r'/+$'), '');
+      // Tự động dọn dẹp các URL Cloudflare tunnel đã tắt hoặc 10.0.2.2 máy ảo cũ
+      if (!clean.contains('trycloudflare') &&
+          !clean.contains('10.0.2.2') &&
+          clean.startsWith('http')) {
+        _cachedBaseUrl = clean;
+        return _cachedBaseUrl!;
+      } else {
+        await prefs.remove(_prefBaseUrlKey);
+      }
     }
     _cachedBaseUrl = _defaultOnlineUrl;
     return _cachedBaseUrl!;
@@ -34,6 +42,31 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefBaseUrlKey, clean);
     _cachedBaseUrl = clean;
+  }
+
+  static Future<void> resetBaseUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefBaseUrlKey);
+    _cachedBaseUrl = _defaultOnlineUrl;
+  }
+
+  // Kiểm tra kết nối nhanh tới máy chủ
+  static Future<Map<String, dynamic>> testConnection() async {
+    final baseUrl = await getBaseUrl();
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/categories')).timeout(const Duration(seconds: 10));
+      return {
+        'success': res.statusCode == 200,
+        'statusCode': res.statusCode,
+        'url': baseUrl,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': e.toString(),
+        'url': baseUrl,
+      };
+    }
   }
 
   // 1. Đăng nhập
@@ -76,7 +109,7 @@ class ApiService {
     final baseUrl = await getBaseUrl();
     final url = Uri.parse('$baseUrl/tables');
     try {
-      final res = await http.get(url).timeout(const Duration(seconds: 8));
+      final res = await http.get(url).timeout(const Duration(seconds: 10));
       if (res.statusCode == 200) {
         final list = jsonDecode(utf8.decode(res.bodyBytes));
         if (list is List) {
@@ -108,19 +141,33 @@ class ApiService {
     final baseUrl = await getBaseUrl();
     final url = Uri.parse('$baseUrl/categories');
     try {
-      final res = await http.get(url).timeout(const Duration(seconds: 8));
+      final res = await http.get(url).timeout(const Duration(seconds: 10));
       if (res.statusCode == 200) {
         final list = jsonDecode(utf8.decode(res.bodyBytes));
         if (list is List) {
-          return list.map((e) => Map<String, dynamic>.from(e)).toList();
+          final items = <Map<String, dynamic>>[
+            {'MaDanhMuc': 0, 'TenDanhMuc': 'Tất cả'}
+          ];
+          for (var e in list) {
+            final name = (e['TenDanhMuc'] ?? '').toString();
+            String displayName = name;
+            if (name.toLowerCase() == 'coffee') displayName = 'Cà Phê';
+            if (name.toLowerCase() == 'bakery') displayName = 'Bánh Ngọt';
+            if (name.toLowerCase() == 'food') displayName = 'Đồ Ăn';
+            items.add({
+              'MaDanhMuc': e['MaDanhMuc'],
+              'TenDanhMuc': displayName,
+            });
+          }
+          return items;
         }
       }
     } catch (_) {}
     return [
       {'MaDanhMuc': 0, 'TenDanhMuc': 'Tất cả'},
       {'MaDanhMuc': 1, 'TenDanhMuc': 'Cà Phê'},
-      {'MaDanhMuc': 2, 'TenDanhMuc': 'Trà & Trà Sữa'},
-      {'MaDanhMuc': 3, 'TenDanhMuc': 'Bánh Ngọt'},
+      {'MaDanhMuc': 2, 'TenDanhMuc': 'Bánh Ngọt'},
+      {'MaDanhMuc': 3, 'TenDanhMuc': 'Đồ Ăn'},
     ];
   }
 
@@ -133,7 +180,7 @@ class ApiService {
     }
     final url = Uri.parse('$baseUrl/products$query');
     try {
-      final res = await http.get(url).timeout(const Duration(seconds: 8));
+      final res = await http.get(url).timeout(const Duration(seconds: 10));
       if (res.statusCode == 200) {
         final list = jsonDecode(utf8.decode(res.bodyBytes));
         if (list is List) {

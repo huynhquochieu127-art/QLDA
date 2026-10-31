@@ -29,6 +29,12 @@ class ProductModel {
     );
   }
 
+  String get fullImageUrl {
+    if (image.isEmpty) return '';
+    if (image.startsWith('http://') || image.startsWith('https://')) return image;
+    return 'https://quan-ly-ca-phe.onrender.com${image.startsWith('/') ? '' : '/'}$image';
+  }
+
   ProductModel copyWith({
     int? id,
     String? name,
