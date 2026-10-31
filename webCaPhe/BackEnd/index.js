@@ -116,22 +116,30 @@ ensurePointsLogTable(db);
 // [POST] Đăng nhập
 app.post("/api/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, username, password } = req.body;
+    let loginId = (email || username || "").trim();
 
-    if (!email || !password) {
+    if (!loginId || !password) {
       return res.status(400).json({
         success: false,
-        message: "Vui lòng nhập đầy đủ email và mật khẩu!",
+        message: "Vui lòng nhập đầy đủ tài khoản/email và mật khẩu!",
       });
     }
 
+    // Hỗ trợ alias tên đăng nhập nhanh cho App Mobile & Web
+    if (loginId.toLowerCase() === "admin") loginId = "admin@gmail.com";
+    if (loginId.toLowerCase() === "quanly" || loginId.toLowerCase() === "manager") loginId = "doan@gmail.com";
+    if (loginId.toLowerCase() === "nhanvien" || loginId.toLowerCase() === "staff") loginId = "nv1@gmail.com";
+
     // 1. Kiểm tra tài khoản test tĩnh (nếu có)
-    if (email === "admin@gmail.com" && password === "123456") {
+    if (loginId === "admin@gmail.com" && password === "123456") {
       const user = {
         id: 1,
         email: "admin@gmail.com",
+        username: "admin",
         role: "admin",
-        name: "Admin",
+        name: "Đoàn Admin",
+        hoTen: "Đoàn Admin",
       };
       const accessToken = jwt.sign(user, JWT_SECRET, { expiresIn: "24h" });
 
@@ -149,8 +157,8 @@ app.post("/api/login", async (req, res) => {
        FROM taikhoan tk
        LEFT JOIN vaitro vt ON tk.MaVaiTro = vt.MaVaiTro
        LEFT JOIN nhanvien nv ON tk.MaTaiKhoan = nv.MaTaiKhoan
-       WHERE tk.Email = ?`,
-      [email.trim()]
+       WHERE tk.Email = ? OR tk.SoDienThoai = ?`,
+      [loginId, loginId]
     );
 
     if (users.length === 0) {

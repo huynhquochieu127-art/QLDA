@@ -8,7 +8,8 @@ import '../models/product.dart';
 import '../models/discount.dart';
 
 class ApiService {
-  static const String _defaultAndroidUrl = 'http://10.0.2.2:5000/api';
+  // Địa chỉ IP Wi-Fi của máy tính đang chạy Backend
+  static const String _defaultAndroidUrl = 'http://192.168.1.15:5000/api';
   static const String _defaultOtherUrl = 'http://localhost:5000/api';
   static const String _prefBaseUrlKey = 'custom_api_base_url';
 
