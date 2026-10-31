@@ -1,0 +1,11 @@
+{
+  "name": "quan-ly-cf",
+  "version": "1.0.0",
+  "description": "Hệ thống Quản lý Quán Cà Phê - Fullstack",
+  "scripts": {
+    "build": "cd BackEnd && npm install && cd ../FrontEnd && npm install --include=dev && npm run build",
+    "start": "cd BackEnd && node index.js",
+    "dev:backend": "cd BackEnd && npm run dev",
+    "dev:frontend": "cd FrontEnd && npm run dev"
+  }
+}
