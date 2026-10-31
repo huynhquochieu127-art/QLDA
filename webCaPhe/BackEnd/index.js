@@ -89,6 +89,23 @@ app.use("/api", discountRoutes);
 const revenueRoutes = require("./routes/revenueRoutes");
 app.use("/api/reports", revenueRoutes);
 
+// Endpoint kiểm tra trạng thái Backend API
+app.get("/api", (req, res) => {
+  res.json({
+    status: "online",
+    message: "🚀 API Backend Quản Lý Cà Phê đang hoạt động tốt!",
+    cleverCloudDatabase: "connected",
+    endpoints: {
+      tables: "/api/tables",
+      products: "/api/products",
+      categories: "/api/categories",
+      orders: "/api/orders",
+      login: "/api/login",
+      discountsValidate: "/api/discounts/validate",
+    },
+  });
+});
+
 
 // Khởi chạy tiến trình chạy ngầm tổng hợp Bảng công nháp ngày cuối tháng
 const { startMonthlyTimesheetJob } = require("./jobs/monthlyTimesheetJob");
