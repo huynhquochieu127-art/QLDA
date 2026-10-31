@@ -3,6 +3,7 @@ class ProductModel {
   final String name;
   final double price;
   final String image;
+  final String? description;
   final int categoryId;
   final String categoryName;
   final bool isAvailable;
@@ -12,10 +13,13 @@ class ProductModel {
     required this.name,
     required this.price,
     required this.image,
+    this.description,
     required this.categoryId,
     required this.categoryName,
     this.isAvailable = true,
   });
+
+  String get imageUrl => image;
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
     final rawPrice = json['Gia'] ?? json['price'] ?? 0;
@@ -34,6 +38,7 @@ class ProductModel {
       name: (json['TenSanPham'] ?? json['name'] ?? '').toString(),
       price: parsedPrice,
       image: (json['HinhAnh'] ?? json['image'] ?? '').toString(),
+      description: (json['MoTa'] ?? json['description'])?.toString(),
       categoryId: catIdVal is int ? catIdVal : int.tryParse(catIdVal.toString()) ?? 1,
       categoryName: (json['TenDanhMuc'] ?? json['categoryName'] ?? 'Đồ uống').toString(),
       isAvailable: parsedActive,
@@ -51,6 +56,7 @@ class ProductModel {
     String? name,
     double? price,
     String? image,
+    String? description,
     int? categoryId,
     String? categoryName,
     bool? isAvailable,
@@ -60,9 +66,11 @@ class ProductModel {
       name: name ?? this.name,
       price: price ?? this.price,
       image: image ?? this.image,
+      description: description ?? this.description,
       categoryId: categoryId ?? this.categoryId,
       categoryName: categoryName ?? this.categoryName,
       isAvailable: isAvailable ?? this.isAvailable,
     );
   }
 }
+

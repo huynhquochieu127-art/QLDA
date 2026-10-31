@@ -780,8 +780,8 @@ app.get("/api/tables", async (req, res) => {
   }
 });
 
-// [PATCH / PUT] Đổi trạng thái bàn
-app.patch(["/api/tables/:id/status", "/api/tables/:id"], async (req, res) => {
+// [PATCH] Đổi trạng thái bàn
+app.patch("/api/tables/:id/status", async (req, res) => {
   try {
     const tableId = req.params.id;
     const { trangThai, status } = req.body;
@@ -801,6 +801,74 @@ app.patch(["/api/tables/:id/status", "/api/tables/:id"], async (req, res) => {
       tableId,
       status: newStatus,
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// [PUT / PATCH] Cập nhật thông tin bàn (Tên, Số chỗ, Khu vực, Trạng thái)
+app.put("/api/tables/:id", async (req, res) => {
+  try {
+    const tableId = req.params.id;
+    const { tenBan, name, soChoNgoi, seats, maKhuVuc, areaId, trangThai, status } = req.body;
+
+    const finalName = tenBan || name;
+    const finalSeats = soChoNgoi || seats;
+    const finalArea = maKhuVuc || areaId;
+    const finalStatus = trangThai || status;
+
+    await db.query(
+      `UPDATE bancafe SET 
+        TenBan = COALESCE(?, TenBan),
+        SoChoNgoi = COALESCE(?, SoChoNgoi),
+        MaKhuVuc = COALESCE(?, MaKhuVuc),
+        TrangThai = COALESCE(?, TrangThai)
+       WHERE MaBan = ?`,
+      [finalName || null, finalSeats || null, finalArea || null, finalStatus || null, tableId]
+    );
+
+    if (finalStatus) {
+      io.emit("table_status_changed", { tableId, status: finalStatus });
+    }
+
+    res.json({
+      success: true,
+      message: "Cập nhật thông tin bàn thành công!",
+      tableId,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// [POST] Thêm bàn mới (Admin)
+app.post("/api/tables", async (req, res) => {
+  try {
+    const { tenBan, name, soChoNgoi, seats, maKhuVuc, areaId } = req.body;
+    const finalName = tenBan || name;
+    if (!finalName) {
+      return res.status(400).json({ success: false, message: "Vui lòng nhập tên bàn!" });
+    }
+    const [result] = await db.query(
+      "INSERT INTO bancafe (TenBan, SoChoNgoi, MaKhuVuc, TrangThai) VALUES (?, ?, ?, 'TRONG')",
+      [finalName, soChoNgoi || seats || 4, maKhuVuc || areaId || 1]
+    );
+    res.status(201).json({
+      success: true,
+      message: "Thêm bàn thành công!",
+      id: result.insertId,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// [DELETE] Xóa bàn (Admin)
+app.delete("/api/tables/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.query("DELETE FROM bancafe WHERE MaBan = ?", [id]);
+    res.json({ success: true, message: "Xóa bàn thành công!" });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

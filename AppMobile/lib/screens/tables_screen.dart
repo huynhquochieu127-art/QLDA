@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../models/table.dart';
 import '../providers/table_provider.dart';
 import '../providers/cart_provider.dart';
+import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
 import 'cart_screen.dart';
 
 class TablesScreen extends StatefulWidget {
@@ -34,8 +36,228 @@ class _TablesScreenState extends State<TablesScreen> {
     }
   }
 
+  // Dialog Thêm Bàn Mới (Admin)
+  void _showAddTableDialog() {
+    final formKey = GlobalKey<FormState>();
+    final nameCtrl = TextEditingController();
+    final seatsCtrl = TextEditingController(text: '4');
+    int selectedArea = 1;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.table_restaurant, color: Color(0xFF5D4037)),
+                SizedBox(width: 8),
+                Text('Thêm Bàn Mới', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              ],
+            ),
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Tên bàn (ví dụ: Bàn 09, VIP 1) *',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Vui lòng nhập tên bàn' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: seatsCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Số chỗ ngồi',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    initialValue: selectedArea,
+                    decoration: const InputDecoration(labelText: 'Khu vực', border: OutlineInputBorder()),
+                    items: const [
+                      DropdownMenuItem(value: 1, child: Text('Tầng 1 (Khu vực chính)')),
+                      DropdownMenuItem(value: 2, child: Text('Tầng 2 (Yên tĩnh)')),
+                      DropdownMenuItem(value: 3, child: Text('Ngoài trời (Sân vườn)')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => selectedArea = val);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Hủy', style: TextStyle(color: Colors.grey))),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D4037), foregroundColor: Colors.white),
+                onPressed: () async {
+                  if (!formKey.currentState!.validate()) return;
+                  Navigator.pop(dialogCtx);
+
+                  final seats = int.tryParse(seatsCtrl.text) ?? 4;
+                  final res = await ApiService.createTable(
+                    tenBan: nameCtrl.text,
+                    soChoNgoi: seats,
+                    maKhuVuc: selectedArea,
+                  );
+
+                  if (!mounted) return;
+                  if (res['success'] == true) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Thêm bàn thành công!'), backgroundColor: Colors.green),
+                    );
+                    Provider.of<TableProvider>(context, listen: false).fetchTables();
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(res['message'] ?? 'Thêm bàn thất bại!'), backgroundColor: Colors.red),
+                    );
+                  }
+                },
+                child: const Text('Tạo bàn'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // Dialog Sửa Bàn (Admin)
+  void _showEditTableDialog(TableModel table) {
+    final formKey = GlobalKey<FormState>();
+    final nameCtrl = TextEditingController(text: table.name);
+    final seatsCtrl = TextEditingController(text: table.seats.toString());
+    int selectedArea = table.areaId;
+    if (selectedArea < 1 || selectedArea > 3) selectedArea = 1;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text('Sửa: Bàn ${table.name}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Tên bàn *', border: OutlineInputBorder()),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Vui lòng nhập tên bàn' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: seatsCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Số chỗ ngồi', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    initialValue: selectedArea,
+                    decoration: const InputDecoration(labelText: 'Khu vực', border: OutlineInputBorder()),
+                    items: const [
+                      DropdownMenuItem(value: 1, child: Text('Tầng 1 (Khu vực chính)')),
+                      DropdownMenuItem(value: 2, child: Text('Tầng 2 (Yên tĩnh)')),
+                      DropdownMenuItem(value: 3, child: Text('Ngoài trời (Sân vườn)')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => selectedArea = val);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Hủy', style: TextStyle(color: Colors.grey))),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D4037), foregroundColor: Colors.white),
+                onPressed: () async {
+                  if (!formKey.currentState!.validate()) return;
+                  Navigator.pop(dialogCtx);
+
+                  final seats = int.tryParse(seatsCtrl.text) ?? table.seats;
+                  final ok = await ApiService.updateTable(
+                    table.id,
+                    tenBan: nameCtrl.text,
+                    soChoNgoi: seats,
+                    maKhuVuc: selectedArea,
+                  );
+
+                  if (!mounted) return;
+                  if (ok) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Cập nhật bàn thành công!'), backgroundColor: Colors.green),
+                    );
+                    Provider.of<TableProvider>(context, listen: false).fetchTables();
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Cập nhật bàn thất bại!'), backgroundColor: Colors.red),
+                    );
+                  }
+                },
+                child: const Text('Lưu thay đổi'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // Dialog Xóa Bàn (Admin)
+  void _confirmDeleteTable(TableModel table) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            SizedBox(width: 8),
+            Text('Xác Nhận Xóa', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text('Bạn có chắc chắn muốn xóa "${table.name}" không?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Hủy', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await ApiService.deleteTable(table.id);
+              if (!mounted) return;
+              if (ok) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Đã xóa bàn thành công!'), backgroundColor: Colors.green),
+                );
+                Provider.of<TableProvider>(context, listen: false).fetchTables();
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Xóa bàn thất bại!'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Xóa ngay'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showTableActionDialog(TableModel table) {
     final cartProvider = Provider.of<CartProvider>(context, listen: false);
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final isAdmin = auth.currentUser?.isAdmin == true;
 
     showModalBottomSheet(
       context: context,
@@ -44,7 +266,7 @@ class _TablesScreenState extends State<TablesScreen> {
       ),
       builder: (ctx) {
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -77,7 +299,7 @@ class _TablesScreenState extends State<TablesScreen> {
                 'Khu vực: ${table.areaName} • Sức chứa: ${table.seats} người',
                 style: const TextStyle(color: Colors.black54),
               ),
-              const Divider(height: 28),
+              const Divider(height: 24),
 
               // Action 1: Gọi món cho bàn này
               ListTile(
@@ -111,6 +333,38 @@ class _TablesScreenState extends State<TablesScreen> {
                   _showChangeStatusDialog(table);
                 },
               ),
+
+              // Action 3: Sửa bàn (Admin)
+              if (isAdmin)
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: Colors.orange[50], shape: BoxShape.circle),
+                    child: const Icon(Icons.edit, color: Colors.orange),
+                  ),
+                  title: const Text('Sửa thông tin bàn (Admin)', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Đổi tên bàn, số chỗ ngồi, khu vực'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showEditTableDialog(table);
+                  },
+                ),
+
+              // Action 4: Xóa bàn (Admin)
+              if (isAdmin)
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: Colors.red[50], shape: BoxShape.circle),
+                    child: const Icon(Icons.delete_outline, color: Colors.red),
+                  ),
+                  title: const Text('Xóa bàn (Admin)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                  subtitle: const Text('Xóa hoàn toàn bàn khỏi hệ thống'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _confirmDeleteTable(table);
+                  },
+                ),
 
               if (table.isOccupied)
                 ListTile(
@@ -188,10 +442,21 @@ class _TablesScreenState extends State<TablesScreen> {
   @override
   Widget build(BuildContext context) {
     final tableProvider = Provider.of<TableProvider>(context);
+    final auth = Provider.of<AuthProvider>(context);
+    final isAdmin = auth.currentUser?.isAdmin == true;
     final tables = tableProvider.filteredTables;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F6F0),
+      floatingActionButton: isAdmin
+          ? FloatingActionButton.extended(
+              backgroundColor: const Color(0xFF5D4037),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text('Thêm Bàn', style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: _showAddTableDialog,
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: tableProvider.fetchTables,
         color: Colors.brown[700],
@@ -234,7 +499,7 @@ class _TablesScreenState extends State<TablesScreen> {
                   : tables.isEmpty
                       ? const Center(child: Text('Không có bàn nào trong khu vực này.'))
                       : GridView.builder(
-                          padding: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
                             childAspectRatio: 1.25,

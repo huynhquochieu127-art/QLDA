@@ -108,18 +108,296 @@ class _MenuScreenState extends State<MenuScreen> {
         .toList();
   }
 
+  // Dialog Thêm Món Mới (Admin / Quản lý)
+  void _showAddProductDialog() {
+    final formKey = GlobalKey<FormState>();
+    final nameCtrl = TextEditingController();
+    final priceCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    final imageCtrl = TextEditingController();
+
+    final validCats = _categories.where((c) => (c['MaDanhMuc'] as int) > 0).toList();
+    int? selectedCatId = validCats.isNotEmpty ? (validCats.first['MaDanhMuc'] as int) : 1;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.add_circle, color: Color(0xFF5D4037)),
+                SizedBox(width: 8),
+                Text('Thêm Món Mới', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              ],
+            ),
+            content: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.9,
+              child: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: nameCtrl,
+                        decoration: const InputDecoration(labelText: 'Tên món *', border: OutlineInputBorder()),
+                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Vui lòng nhập tên món' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: priceCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Giá bán (VNĐ) *', border: OutlineInputBorder()),
+                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Vui lòng nhập giá' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      if (validCats.isNotEmpty)
+                        DropdownButtonFormField<int>(
+                          initialValue: selectedCatId,
+                          decoration: const InputDecoration(labelText: 'Danh mục', border: OutlineInputBorder()),
+                          items: validCats
+                              .map((c) => DropdownMenuItem<int>(
+                                    value: c['MaDanhMuc'] as int,
+                                    child: Text(c['TenDanhMuc'] ?? ''),
+                                  ))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) setDialogState(() => selectedCatId = val);
+                          },
+                        ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: imageCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'URL Hình ảnh (tùy chọn)',
+                          hintText: 'https://images.unsplash.com/...',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: descCtrl,
+                        maxLines: 2,
+                        decoration: const InputDecoration(labelText: 'Mô tả món', border: OutlineInputBorder()),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Hủy', style: TextStyle(color: Colors.grey))),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D4037), foregroundColor: Colors.white),
+                onPressed: () async {
+                  if (!formKey.currentState!.validate()) return;
+                  Navigator.pop(dialogCtx);
+
+                  final price = double.tryParse(priceCtrl.text.replaceAll(RegExp(r'[^\d.]'), '')) ?? 0;
+                  final res = await ApiService.createProduct(
+                    tenSanPham: nameCtrl.text,
+                    gia: price,
+                    moTa: descCtrl.text.isNotEmpty ? descCtrl.text : null,
+                    maDanhMuc: selectedCatId,
+                    hinhAnh: imageCtrl.text.isNotEmpty ? imageCtrl.text : null,
+                  );
+
+                  if (!mounted) return;
+                  if (res['success'] == true) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Thêm món thành công!'), backgroundColor: Colors.green),
+                    );
+                    _loadData();
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(res['message'] ?? 'Thêm món thất bại!'), backgroundColor: Colors.red),
+                    );
+                  }
+                },
+                child: const Text('Thêm món'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // Dialog Sửa Món Ăn (Admin / Quản lý)
+  void _showEditProductDialog(ProductModel product) {
+    final formKey = GlobalKey<FormState>();
+    final nameCtrl = TextEditingController(text: product.name);
+    final priceCtrl = TextEditingController(text: product.price.toInt().toString());
+    final descCtrl = TextEditingController(text: product.description ?? '');
+    final imageCtrl = TextEditingController(text: product.imageUrl);
+
+    final validCats = _categories.where((c) => (c['MaDanhMuc'] as int) > 0).toList();
+    int selectedCatId = product.categoryId;
+    if (!validCats.any((c) => (c['MaDanhMuc'] as int) == selectedCatId)) {
+      selectedCatId = validCats.isNotEmpty ? (validCats.first['MaDanhMuc'] as int) : 1;
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text('Sửa món: ${product.name}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            content: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.9,
+              child: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: nameCtrl,
+                        decoration: const InputDecoration(labelText: 'Tên món *', border: OutlineInputBorder()),
+                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Vui lòng nhập tên món' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: priceCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Giá bán (VNĐ) *', border: OutlineInputBorder()),
+                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Vui lòng nhập giá' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      if (validCats.isNotEmpty)
+                        DropdownButtonFormField<int>(
+                          initialValue: selectedCatId,
+                          decoration: const InputDecoration(labelText: 'Danh mục', border: OutlineInputBorder()),
+                          items: validCats
+                              .map((c) => DropdownMenuItem<int>(
+                                    value: c['MaDanhMuc'] as int,
+                                    child: Text(c['TenDanhMuc'] ?? ''),
+                                  ))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) setDialogState(() => selectedCatId = val);
+                          },
+                        ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: imageCtrl,
+                        decoration: const InputDecoration(labelText: 'URL Hình ảnh', border: OutlineInputBorder()),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: descCtrl,
+                        maxLines: 2,
+                        decoration: const InputDecoration(labelText: 'Mô tả món', border: OutlineInputBorder()),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Hủy', style: TextStyle(color: Colors.grey))),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D4037), foregroundColor: Colors.white),
+                onPressed: () async {
+                  if (!formKey.currentState!.validate()) return;
+                  Navigator.pop(dialogCtx);
+
+                  final price = double.tryParse(priceCtrl.text.replaceAll(RegExp(r'[^\d.]'), '')) ?? product.price;
+                  final res = await ApiService.updateProduct(
+                    product.id,
+                    tenSanPham: nameCtrl.text,
+                    gia: price,
+                    moTa: descCtrl.text,
+                    maDanhMuc: selectedCatId,
+                    hinhAnh: imageCtrl.text,
+                  );
+
+                  if (!mounted) return;
+                  if (res['success'] == true) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Cập nhật món thành công!'), backgroundColor: Colors.green),
+                    );
+                    _loadData();
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(res['message'] ?? 'Cập nhật món thất bại!'), backgroundColor: Colors.red),
+                    );
+                  }
+                },
+                child: const Text('Lưu thay đổi'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // Dialog Xóa món (Admin / Quản lý)
+  void _confirmDeleteProduct(ProductModel product) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            SizedBox(width: 8),
+            Text('Xác Nhận Xóa', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text('Bạn có chắc chắn muốn xóa món "${product.name}" khỏi thực đơn?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Hủy', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await ApiService.deleteProduct(product.id);
+              if (!mounted) return;
+              if (ok) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Đã xóa món thành công!'), backgroundColor: Colors.green),
+                );
+                _loadData();
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Xóa món thất bại!'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Xóa ngay'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cart = Provider.of<CartProvider>(context);
     final auth = Provider.of<AuthProvider>(context);
     final user = auth.currentUser;
     final canToggle = user?.canToggleProductStatus == true;
+    final canEdit = user?.canEditProducts == true;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F6F0),
+      floatingActionButton: (canEdit && cart.items.isEmpty)
+          ? FloatingActionButton.extended(
+              backgroundColor: const Color(0xFF5D4037),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text('Thêm Món Mới', style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: _showAddProductDialog,
+            )
+          : null,
       body: Column(
         children: [
-          // Thanh tìm kiếm + Nút làm mới
+          // Thanh tìm kiếm + Nút Thêm Món (Admin) + Nút Làm mới
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
             child: Row(
@@ -150,6 +428,15 @@ class _MenuScreenState extends State<MenuScreen> {
                     ),
                   ),
                 ),
+                if (canEdit) ...[
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                    style: IconButton.styleFrom(backgroundColor: const Color(0xFF5D4037)),
+                    icon: const Icon(Icons.add, color: Colors.white),
+                    tooltip: 'Thêm món mới',
+                    onPressed: _showAddProductDialog,
+                  ),
+                ],
                 const SizedBox(width: 8),
                 IconButton.filledTonal(
                   icon: const Icon(Icons.refresh, color: Color(0xFF5D4037)),
@@ -290,7 +577,7 @@ class _MenuScreenState extends State<MenuScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Ảnh món + Tag tình trạng món
+                                  // Ảnh món + Tag tình trạng món + Menu Quản lý
                                   Expanded(
                                     child: Stack(
                                       fit: StackFit.expand,
@@ -327,7 +614,54 @@ class _MenuScreenState extends State<MenuScreen> {
                                               ),
                                             ),
                                           ),
-                                        // Nút bật/tắt Còn món / Hết món cho Admin / Manager / Barista
+                                        // Menu Sửa / Xóa món cho Admin & Manager (Góc trên bên trái)
+                                        if (canEdit)
+                                          Positioned(
+                                            top: 6,
+                                            left: 6,
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withValues(alpha: 0.55),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: PopupMenuButton<String>(
+                                                icon: const Icon(Icons.more_vert, size: 18, color: Colors.white),
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                onSelected: (val) {
+                                                  if (val == 'edit') {
+                                                    _showEditProductDialog(product);
+                                                  } else if (val == 'delete') {
+                                                    _confirmDeleteProduct(product);
+                                                  }
+                                                },
+                                                itemBuilder: (ctx) => [
+                                                  const PopupMenuItem(
+                                                    value: 'edit',
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(Icons.edit_outlined, size: 18, color: Colors.blue),
+                                                        SizedBox(width: 8),
+                                                        Text('Sửa món'),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  const PopupMenuItem(
+                                                    value: 'delete',
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                                        SizedBox(width: 8),
+                                                        Text('Xóa món', style: TextStyle(color: Colors.red)),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        // Nút bật/tắt Còn món / Hết món cho Admin / Manager / Barista (Góc trên bên phải)
                                         if (canToggle)
                                           Positioned(
                                             top: 6,
@@ -414,46 +748,46 @@ class _MenuScreenState extends State<MenuScreen> {
                                                       style: ElevatedButton.styleFrom(
                                                         backgroundColor: const Color(0xFF5D4037),
                                                         foregroundColor: Colors.white,
-                                                      padding: EdgeInsets.zero,
-                                                      shape: RoundedRectangleBorder(
-                                                        borderRadius: BorderRadius.circular(8),
+                                                        padding: EdgeInsets.zero,
+                                                        shape: RoundedRectangleBorder(
+                                                          borderRadius: BorderRadius.circular(8),
+                                                        ),
                                                       ),
+                                                      icon: const Icon(Icons.add, size: 16),
+                                                      label: const Text('Thêm', style: TextStyle(fontSize: 12)),
+                                                      onPressed: () => cart.addItem(product),
+                                                    )
+                                                  : Row(
+                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                      children: [
+                                                        IconButton(
+                                                          icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                                                          padding: EdgeInsets.zero,
+                                                          constraints: const BoxConstraints(),
+                                                          onPressed: () => cart.decreaseQuantity(product.id),
+                                                        ),
+                                                        Text(
+                                                          '$inCartCount',
+                                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                                        ),
+                                                        IconButton(
+                                                          icon: const Icon(Icons.add_circle, color: Color(0xFF5D4037)),
+                                                          padding: EdgeInsets.zero,
+                                                          constraints: const BoxConstraints(),
+                                                          onPressed: () => cart.addItem(product),
+                                                        ),
+                                                      ],
                                                     ),
-                                                    icon: const Icon(Icons.add, size: 16),
-                                                    label: const Text('Thêm', style: TextStyle(fontSize: 12)),
-                                                    onPressed: () => cart.addItem(product),
-                                                  )
-                                                : Row(
-                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                    children: [
-                                                      IconButton(
-                                                        icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-                                                        padding: EdgeInsets.zero,
-                                                        constraints: const BoxConstraints(),
-                                                        onPressed: () => cart.decreaseQuantity(product.id),
-                                                      ),
-                                                      Text(
-                                                        '$inCartCount',
-                                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                                      ),
-                                                      IconButton(
-                                                        icon: const Icon(Icons.add_circle, color: Color(0xFF5D4037)),
-                                                        padding: EdgeInsets.zero,
-                                                        constraints: const BoxConstraints(),
-                                                        onPressed: () => cart.addItem(product),
-                                                      ),
-                                                    ],
-                                                  ),
-                                      ),
-                                    ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                    ),
           ),
         ],
       ),

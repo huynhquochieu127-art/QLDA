@@ -518,4 +518,356 @@ class ApiService {
     } catch (_) {}
     return [];
   }
+
+  // 21. Thêm nhân viên mới (Admin)
+  static Future<Map<String, dynamic>> createEmployee({
+    required String hoTen,
+    required String email,
+    String? soDienThoai,
+    String? cccd,
+    String? chucVu,
+    String loaiNhanVien = 'Full-time',
+    double? luong,
+    int? maVaiTro,
+    String? password,
+  }) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/employees');
+    try {
+      final res = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'hoTen': hoTen.trim(),
+          'email': email.trim(),
+          'soDienThoai': soDienThoai?.trim(),
+          'cccd': cccd?.trim(),
+          'chucVu': chucVu?.trim() ?? 'Nhân viên',
+          'loaiNhanVien': loaiNhanVien,
+          'luong': luong ?? 0,
+          'maVaiTro': maVaiTro ?? 3,
+          'password': password?.trim(),
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(utf8.decode(res.bodyBytes));
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return {'success': true, 'message': data['message'] ?? 'Thêm nhân viên thành công!', 'data': data};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Thêm nhân viên thất bại'};
+    } catch (e) {
+      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+    }
+  }
+
+  // 22. Cập nhật nhân viên (Admin)
+  static Future<Map<String, dynamic>> updateEmployee(
+    int id, {
+    String? hoTen,
+    String? soDienThoai,
+    String? cccd,
+    String? chucVu,
+    String? loaiNhanVien,
+    double? luong,
+    String? trangThai,
+    int? maVaiTro,
+  }) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/employees/$id');
+    try {
+      final body = <String, dynamic>{};
+      if (hoTen != null) body['hoTen'] = hoTen.trim();
+      if (soDienThoai != null) body['soDienThoai'] = soDienThoai.trim();
+      if (cccd != null) body['cccd'] = cccd.trim();
+      if (chucVu != null) body['chucVu'] = chucVu.trim();
+      if (loaiNhanVien != null) body['loaiNhanVien'] = loaiNhanVien;
+      if (luong != null) body['luong'] = luong;
+      if (trangThai != null) body['trangThai'] = trangThai;
+      if (maVaiTro != null) body['maVaiTro'] = maVaiTro;
+
+      final res = await http.put(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(utf8.decode(res.bodyBytes));
+      if (res.statusCode == 200) {
+        return {'success': true, 'message': data['message'] ?? 'Cập nhật thành công!'};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Cập nhật thất bại'};
+    } catch (e) {
+      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+    }
+  }
+
+  // 23. Xóa nhân viên (Admin)
+  static Future<bool> deleteEmployee(int id) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/employees/$id');
+    try {
+      final res = await http.delete(url).timeout(const Duration(seconds: 8));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // 24. Thêm sản phẩm mới (Admin)
+  static Future<Map<String, dynamic>> createProduct({
+    required String tenSanPham,
+    required double gia,
+    String? moTa,
+    int? maDanhMuc,
+    String? hinhAnh,
+  }) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/products');
+    try {
+      final res = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'tenSanPham': tenSanPham.trim(),
+          'gia': gia,
+          'moTa': moTa?.trim(),
+          'maDanhMuc': maDanhMuc,
+          'hinhAnh': hinhAnh?.trim(),
+          'coBan': 1,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(utf8.decode(res.bodyBytes));
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return {'success': true, 'message': data['message'] ?? 'Thêm món thành công!'};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Thêm món thất bại'};
+    } catch (e) {
+      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+    }
+  }
+
+  // 25. Cập nhật sản phẩm (Admin)
+  static Future<Map<String, dynamic>> updateProduct(
+    int id, {
+    required String tenSanPham,
+    required double gia,
+    String? moTa,
+    int? maDanhMuc,
+    String? hinhAnh,
+  }) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/products/$id');
+    try {
+      final body = <String, dynamic>{
+        'tenSanPham': tenSanPham.trim(),
+        'gia': gia,
+        'moTa': moTa?.trim(),
+        'maDanhMuc': maDanhMuc,
+        'coBan': 1,
+      };
+      if (hinhAnh != null && hinhAnh.isNotEmpty) {
+        body['hinhAnh'] = hinhAnh.trim();
+      }
+
+      final res = await http.put(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(utf8.decode(res.bodyBytes));
+      if (res.statusCode == 200) {
+        return {'success': true, 'message': data['message'] ?? 'Cập nhật món thành công!'};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Cập nhật thất bại'};
+    } catch (e) {
+      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+    }
+  }
+
+  // 26. Xóa sản phẩm (Admin)
+  static Future<bool> deleteProduct(int id) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/products/$id');
+    try {
+      final res = await http.delete(url).timeout(const Duration(seconds: 8));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // 27. Thêm bàn mới (Admin)
+  static Future<Map<String, dynamic>> createTable({
+    required String tenBan,
+    int soChoNgoi = 4,
+    int maKhuVuc = 1,
+  }) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/tables');
+    try {
+      final res = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'tenBan': tenBan.trim(),
+          'soChoNgoi': soChoNgoi,
+          'maKhuVuc': maKhuVuc,
+        }),
+      ).timeout(const Duration(seconds: 8));
+
+      final data = jsonDecode(utf8.decode(res.bodyBytes));
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return {'success': true, 'message': data['message'] ?? 'Thêm bàn thành công!'};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Thêm bàn thất bại'};
+    } catch (e) {
+      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+    }
+  }
+
+  // 28. Cập nhật thông tin bàn (Admin)
+  static Future<bool> updateTable(
+    int tableId, {
+    String? tenBan,
+    int? soChoNgoi,
+    int? maKhuVuc,
+    String? trangThai,
+  }) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/tables/$tableId');
+    try {
+      final body = <String, dynamic>{};
+      if (tenBan != null) body['tenBan'] = tenBan.trim();
+      if (soChoNgoi != null) body['soChoNgoi'] = soChoNgoi;
+      if (maKhuVuc != null) body['maKhuVuc'] = maKhuVuc;
+      if (trangThai != null) body['trangThai'] = trangThai;
+
+      final res = await http.put(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 8));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // 29. Xóa bàn (Admin)
+  static Future<bool> deleteTable(int tableId) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/tables/$tableId');
+    try {
+      final res = await http.delete(url).timeout(const Duration(seconds: 8));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // 30. Thêm mã giảm giá mới (Admin & Quản lý)
+  static Future<Map<String, dynamic>> createDiscount({
+    required String maCode,
+    required String tenMG,
+    String loaiGiam = 'percent',
+    required double giaTriGiam,
+    double donHangToiThieu = 0,
+    int diemToiThieu = 0,
+    double? giaTriToiDa,
+  }) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/discounts');
+    try {
+      final res = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'maCode': maCode.trim().toUpperCase(),
+          'tenMG': tenMG.trim(),
+          'loaiGiam': loaiGiam,
+          'giaTriGiam': giaTriGiam,
+          'donHangToiThieu': donHangToiThieu,
+          'diemToiThieu': diemToiThieu,
+          'giaTriToiDa': giaTriToiDa,
+        }),
+      ).timeout(const Duration(seconds: 8));
+
+      final data = jsonDecode(utf8.decode(res.bodyBytes));
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return {'success': true, 'message': 'Tạo mã giảm giá thành công!'};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Tạo mã giảm giá thất bại'};
+    } catch (e) {
+      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+    }
+  }
+
+  // 31. Xóa mã giảm giá (Admin)
+  static Future<bool> deleteDiscount(int id) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/discounts/$id');
+    try {
+      final res = await http.delete(url).timeout(const Duration(seconds: 8));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // 32. Bật / Tắt trạng thái mã giảm giá
+  static Future<bool> toggleDiscountStatus(int id, bool isActive) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/discounts/$id/status');
+    try {
+      final res = await http.patch(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'trangThai': isActive ? 1 : 0}),
+      ).timeout(const Duration(seconds: 8));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // 33. Cập nhật khách hàng (Admin / Quản lý)
+  static Future<bool> updateCustomer(
+    int id, {
+    required String name,
+    required String phone,
+    String? dob,
+    String? email,
+  }) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/customers/$id');
+    try {
+      final res = await http.put(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'name': name.trim(),
+          'phone': phone.trim(),
+          'dob': dob,
+          'email': email?.trim(),
+        }),
+      ).timeout(const Duration(seconds: 8));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // 34. Xóa khách hàng (Admin)
+  static Future<bool> deleteCustomer(int id) async {
+    final baseUrl = await getBaseUrl();
+    final url = Uri.parse('$baseUrl/customers/$id');
+    try {
+      final res = await http.delete(url).timeout(const Duration(seconds: 8));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 }

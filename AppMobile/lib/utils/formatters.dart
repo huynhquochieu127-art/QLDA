@@ -7,6 +7,8 @@ class Formatters {
     return '${_currencyFormat.format(amount)} đ';
   }
 
+  static String currency(double amount) => formatCurrency(amount);
+
   static String formatDate(DateTime date) {
     return DateFormat('dd/MM/yyyy').format(date);
   }
