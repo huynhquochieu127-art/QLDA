@@ -263,21 +263,53 @@ exports.deleteDiscount = async (req, res) => {
   }
 };
 
+// Helper định dạng Date -> 'YYYY-MM-DD' theo giờ địa phương (tránh lệch timezone UTC)
+function formatDateLocal(d) {
+  if (!d) return null;
+  if (typeof d === "string") return d.slice(0, 10);
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return null;
+  const year = dt.getFullYear();
+  const month = String(dt.getMonth() + 1).padStart(2, "0");
+  const day = String(dt.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 // [POST] /api/discounts/validate - Kiểm tra hợp lệ khi áp dụng mã (Kiểm tra nghiêm ngặt MỐC ĐIỂM)
 exports.validateDiscount = async (req, res) => {
   try {
-    const { maCode, subtotal = 0, customerPoints = 0, customerId } = req.body;
+    const rawCode = req.body.maCode || req.body.maGiamGia || req.body.code || "";
+    const rawSubtotal = req.body.subtotal ?? req.body.tongTien ?? req.body.total ?? 0;
+    const rawCustomerId = req.body.customerId ?? req.body.maKhachHang ?? null;
+    let currentPoints = parseInt(req.body.customerPoints ?? req.body.points ?? 0, 10) || 0;
 
-    if (!maCode) {
+    if (!rawCode || !String(rawCode).trim()) {
       return res.status(400).json({ success: false, message: "Vui lòng nhập mã giảm giá!" });
     }
 
-    const cleanCode = maCode.trim().toUpperCase();
+    const cleanCode = String(rawCode).trim().toUpperCase();
+    const cleanWithoutPercent = cleanCode.replace(/%/g, "");
 
-    // 1. Tìm mã trong database
+    // Tự động truy vấn số điểm tích lũy của khách hàng nếu chưa truyền
+    if (currentPoints === 0 && rawCustomerId) {
+      try {
+        const [custRows] = await db.query(
+          "SELECT DiemTichLuy FROM khachhang WHERE MaKhachHang = ?",
+          [rawCustomerId]
+        );
+        if (custRows.length > 0) {
+          currentPoints = parseInt(custRows[0].DiemTichLuy, 10) || 0;
+        }
+      } catch (_) {}
+    }
+
+    // 1. Tìm mã trong database (hỗ trợ cả có % hoặc không có %)
     const [rows] = await db.query(
-      "SELECT * FROM mamgiamgia WHERE UPPER(MaCode) = ?",
-      [cleanCode]
+      `SELECT * FROM mamgiamgia 
+       WHERE UPPER(MaCode) = ? 
+          OR UPPER(MaCode) = ? 
+          OR UPPER(REPLACE(MaCode, '%', '')) = ?`,
+      [cleanCode, cleanCode + "%", cleanWithoutPercent]
     );
 
     if (rows.length === 0) {
@@ -290,47 +322,47 @@ exports.validateDiscount = async (req, res) => {
     const discount = rows[0];
 
     // 2. Kiểm tra trạng thái hoạt động
-    if (discount.TrangThai !== 1) {
+    if (Number(discount.TrangThai) !== 1) {
       return res.status(400).json({
         success: false,
-        message: `Mã giảm giá "${cleanCode}" đang tạm ngưng hoạt động!`,
+        message: `Mã giảm giá "${discount.MaCode}" đang tạm ngưng hoạt động!`,
       });
     }
 
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = formatDateLocal(new Date());
 
     // 3. Kiểm tra ngày bắt đầu
     if (discount.NgayBatDau) {
-      const startStr = new Date(discount.NgayBatDau).toISOString().split("T")[0];
-      if (todayStr < startStr) {
+      const startStr = formatDateLocal(discount.NgayBatDau);
+      if (startStr && todayStr < startStr) {
         return res.status(400).json({
           success: false,
-          message: `Mã giảm giá "${cleanCode}" chỉ bắt đầu áp dụng từ ngày ${startStr}!`,
+          message: `Mã giảm giá "${discount.MaCode}" chỉ bắt đầu áp dụng từ ngày ${startStr}!`,
         });
       }
     }
 
     // 4. Kiểm tra ngày hết hạn
     if (discount.NgayHetHan) {
-      const endStr = new Date(discount.NgayHetHan).toISOString().split("T")[0];
-      if (todayStr > endStr) {
+      const endStr = formatDateLocal(discount.NgayHetHan);
+      if (endStr && todayStr > endStr) {
         return res.status(400).json({
           success: false,
-          message: `Mã giảm giá "${cleanCode}" đã hết hạn vào ngày ${endStr}!`,
+          message: `Mã giảm giá "${discount.MaCode}" đã hết hạn vào ngày ${endStr}!`,
         });
       }
     }
 
     // 5. Kiểm tra giới hạn lượt dùng
-    if (discount.GioiHanDung !== null && discount.SoLanDung >= discount.GioiHanDung) {
+    if (discount.GioiHanDung !== null && Number(discount.SoLanDung) >= Number(discount.GioiHanDung)) {
       return res.status(400).json({
         success: false,
-        message: `Mã giảm giá "${cleanCode}" đã hết lượt sử dụng (${discount.GioiHanDung} lượt)!`,
+        message: `Mã giảm giá "${discount.MaCode}" đã hết lượt sử dụng (${discount.GioiHanDung} lượt)!`,
       });
     }
 
     // 6. Kiểm tra đơn hàng tối thiểu
-    const numSubtotal = Number(subtotal) || 0;
+    const numSubtotal = Number(rawSubtotal) || 0;
     const minOrder = Number(discount.DonHangToiThieu) || 0;
     if (minOrder > 0 && numSubtotal < minOrder) {
       return res.status(400).json({
@@ -341,13 +373,12 @@ exports.validateDiscount = async (req, res) => {
 
     // 7. ⭐ KIỂM TRA RÀNG BUỘC "MỐC ĐIỂM" (BẮT BUỘC THEO YÊU CẦU ĐỀ BÀI)
     const minPoints = parseInt(discount.DiemToiThieu, 10) || 0;
-    const currentPoints = parseInt(customerPoints, 10) || 0;
 
     if (minPoints > 0) {
       if (currentPoints < minPoints) {
         return res.status(400).json({
           success: false,
-          message: `Khách hàng phải có tối thiểu ${minPoints} điểm mới được phép dùng mã "${cleanCode}" (Khách hiện có: ${currentPoints} điểm).`,
+          message: `Khách hàng phải có tối thiểu ${minPoints} điểm mới được phép dùng mã "${discount.MaCode}" (Khách hiện có: ${currentPoints} điểm).`,
           requiredPoints: minPoints,
           currentPoints: currentPoints,
         });
@@ -365,23 +396,43 @@ exports.validateDiscount = async (req, res) => {
       discountAmount = Math.min(Number(discount.GiaTriGiam), numSubtotal);
     }
 
+    const discountInfo = {
+      id: discount.MaMG,
+      code: discount.MaCode,
+      name: discount.TenMG,
+      type: discount.LoaiGiam,
+      value: Number(discount.GiaTriGiam),
+      maxAmount: discount.GiaTriToiDa ? Number(discount.GiaTriToiDa) : null,
+      minPoints: minPoints,
+      minOrder: minOrder,
+      discountAmount: discountAmount,
+      amount: discountAmount,
+    };
+
     res.json({
       success: true,
       valid: true,
       message: `Áp dụng thành công mã "${discount.MaCode}"! Giảm ${discountAmount.toLocaleString("vi-VN")}đ.`,
-      discount: {
-        id: discount.MaMG,
-        code: discount.MaCode,
-        name: discount.TenMG,
-        type: discount.LoaiGiam,
-        value: Number(discount.GiaTriGiam),
-        maxAmount: discount.GiaTriToiDa ? Number(discount.GiaTriToiDa) : null,
-        minPoints: minPoints,
-        minOrder: minOrder,
+      discount: discountInfo,
+      data: {
+        soTienGiam: discountAmount,
+        giamGia: discountAmount,
         discountAmount: discountAmount,
+        amount: discountAmount,
+        maGiamGia: discount.MaCode,
+        code: discount.MaCode,
+        tenKhuyenMai: discount.TenMG,
+        moTa: discount.TenMG,
+        diemDaTru: minPoints,
+        diemSuDung: minPoints,
+        minPoints: minPoints,
       },
+      soTienGiam: discountAmount,
+      giamGia: discountAmount,
+      discountAmount: discountAmount,
     });
   } catch (err) {
-    res.status(500).json({ message: "Lỗi kiểm tra mã: " + err.message });
+    console.error("Lỗi validate discount:", err);
+    res.status(500).json({ success: false, message: "Lỗi kiểm tra mã: " + err.message });
   }
 };

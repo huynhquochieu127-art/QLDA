@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { API_BASE } from "../utils/staffWork";
 
@@ -9,10 +9,28 @@ export default function PosDiscountCode({ subtotal, customer, applied, onApply, 
   const [code, setCode] = useState("");
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
+  const [availableCodes, setAvailableCodes] = useState([]);
 
-  const handleApply = async (e) => {
-    e.preventDefault();
-    const maGiamGia = code.trim().toUpperCase();
+  // Tải danh sách mã giảm giá đang hoạt động để gợi ý nhanh
+  useEffect(() => {
+    let isMounted = true;
+    axios
+      .get(`${API_BASE}/discounts`, { timeout: 6000 })
+      .then((res) => {
+        if (!isMounted) return;
+        const list = Array.isArray(res.data) ? res.data : [];
+        const active = list.filter((d) => Number(d.TrangThai) === 1);
+        setAvailableCodes(active.slice(0, 4));
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleApply = async (e, directCode) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const maGiamGia = (directCode || code).trim().toUpperCase();
     if (!maGiamGia) {
       setError("Vui lòng nhập mã giảm giá.");
       return;
@@ -25,22 +43,34 @@ export default function PosDiscountCode({ subtotal, customer, applied, onApply, 
     setChecking(true);
     setError("");
     try {
-      const res = await axios.post(
-        `${API_BASE}/khuyen-mai/ap-dung`,
-        { maGiamGia, maKhachHang: customer ? customer.id : null, tongTien: subtotal },
-        { timeout: 5000 }
-      );
-      const data = res.data?.data ?? res.data ?? {};
-      const soTienGiam = Number(data.soTienGiam ?? data.giamGia ?? 0);
+      const payload = {
+        maGiamGia,
+        maCode: maGiamGia,
+        code: maGiamGia,
+        maKhachHang: customer ? customer.id : null,
+        customerId: customer ? customer.id : null,
+        customerPoints: customer ? (customer.points ?? customer.DiemTichLuy ?? 0) : 0,
+        tongTien: subtotal,
+        subtotal: subtotal,
+      };
+
+      const res = await axios.post(`${API_BASE}/discounts/validate`, payload, { timeout: 8000 });
+      const data = res.data?.data ?? res.data?.discount ?? res.data ?? {};
+      const soTienGiam = Number(data.soTienGiam ?? data.giamGia ?? data.discountAmount ?? data.amount ?? 0);
+      
       if (res.data?.success === false || soTienGiam <= 0) {
         setError(res.data?.message || "Mã giảm giá không hợp lệ.");
         return;
       }
+
       onApply({
-        code: maGiamGia,
+        code: data.maGiamGia || data.code || maGiamGia,
         amount: Math.min(soTienGiam, subtotal),
-        pointsUsed: Number(data.diemDaTru ?? data.diemSuDung ?? 0),
-        description: data.moTa || data.tenKhuyenMai || "",
+        discountAmount: Math.min(soTienGiam, subtotal),
+        pointsUsed: Number(data.diemDaTru ?? data.diemSuDung ?? data.minPoints ?? 0),
+        minPoints: Number(data.minPoints ?? data.diemDaTru ?? 0),
+        description: data.moTa || data.tenKhuyenMai || data.name || "",
+        name: data.tenKhuyenMai || data.name || data.moTa || "",
         subtotalAtApply: subtotal,
       });
       setCode("");
@@ -58,17 +88,19 @@ export default function PosDiscountCode({ subtotal, customer, applied, onApply, 
 
   // Đã áp mã thành công: hiển thị thẻ mã + nút gỡ
   if (applied) {
+    const dispAmount = applied.discountAmount ?? applied.amount ?? 0;
     return (
       <div className="pos-discount">
         <div className="pos-discount-applied">
           <div className="pos-discount-applied-info">
             <span className="pos-discount-tag">🏷️ {applied.code}</span>
             <span className="pos-discount-note">
-              {applied.description || "Đã áp dụng mã giảm giá"}
-              {applied.pointsUsed > 0 && ` · Trừ ${applied.pointsUsed.toLocaleString("vi-VN")} điểm`}
+              {applied.description || applied.name || "Đã áp dụng mã giảm giá"}
+              {(applied.pointsUsed > 0 || applied.minPoints > 0) &&
+                ` · Yêu cầu ${(applied.pointsUsed || applied.minPoints).toLocaleString("vi-VN")} điểm`}
             </span>
           </div>
-          <span className="pos-discount-amount">- {applied.amount.toLocaleString("vi-VN")} đ</span>
+          <span className="pos-discount-amount">- {dispAmount.toLocaleString("vi-VN")} đ</span>
           <button type="button" className="pos-discount-remove" onClick={onRemove} title="Gỡ mã giảm giá">
             ×
           </button>
@@ -78,7 +110,7 @@ export default function PosDiscountCode({ subtotal, customer, applied, onApply, 
   }
 
   return (
-    <form className="pos-discount" onSubmit={handleApply}>
+    <form className="pos-discount" onSubmit={(e) => handleApply(e, code)}>
       <label className="section-label" htmlFor="pos-discount-input">
         Mã giảm giá
       </label>
@@ -87,7 +119,7 @@ export default function PosDiscountCode({ subtotal, customer, applied, onApply, 
           id="pos-discount-input"
           type="text"
           className={`pos-discount-input ${error ? "invalid" : ""}`}
-          placeholder="Nhập mã (vd: GIAM10)"
+          placeholder="Nhập mã (vd: GIAM10, GIAMGIA20K)"
           value={code}
           onChange={(e) => {
             setCode(e.target.value.toUpperCase().replace(/\s/g, ""));
@@ -100,8 +132,39 @@ export default function PosDiscountCode({ subtotal, customer, applied, onApply, 
           {checking ? "Đang kiểm tra..." : "Áp dụng"}
         </button>
       </div>
+
+      {/* Gợi ý các mã khả dụng */}
+      {availableCodes.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
+          <span style={{ fontSize: "11px", color: "#64748b", alignSelf: "center" }}>Gợi ý:</span>
+          {availableCodes.map((d) => (
+            <button
+              key={d.MaCode}
+              type="button"
+              onClick={() => {
+                setCode(d.MaCode);
+                handleApply(null, d.MaCode);
+              }}
+              style={{
+                background: "#f1f5f9",
+                border: "1px dashed #cbd5e1",
+                borderRadius: "4px",
+                padding: "2px 6px",
+                fontSize: "11px",
+                fontWeight: 600,
+                color: "#475569",
+                cursor: "pointer",
+              }}
+              title={d.TenMG || d.MaCode}
+            >
+              {d.MaCode}
+            </button>
+          ))}
+        </div>
+      )}
+
       {error ? (
-        <div className="pos-discount-error">{error}</div>
+        <div className="pos-discount-error">⚠️ {error}</div>
       ) : (
         !customer && (
           <div className="pos-discount-hint">Mã đổi điểm cần chọn khách hàng trước khi áp dụng.</div>

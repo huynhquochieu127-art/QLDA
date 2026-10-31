@@ -17,6 +17,7 @@ import {
   TrendingDown,
   Sparkles,
 } from "lucide-react";
+import { API_BASE } from "../config/api";
 
 const formatVND = (num) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(num || 0);
@@ -65,7 +66,7 @@ export default function DiscountManagement({ currentRole }) {
       if (filterType !== "all") params.type = filterType;
       if (filterStatus !== "all") params.status = filterStatus;
 
-      const res = await axios.get("http://localhost:5000/api/discounts", { params });
+      const res = await axios.get(`${API_BASE}/discounts`, { params });
       setDiscounts(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       setError(err.response?.data?.message || err.message);
@@ -129,10 +130,10 @@ export default function DiscountManagement({ currentRole }) {
 
     try {
       if (editingItem) {
-        await axios.put(`http://localhost:5000/api/discounts/${editingItem.MaMG}`, form);
+        await axios.put(`${API_BASE}/discounts/${editingItem.MaMG}`, form);
         setNotice(`Đã cập nhật chiến dịch "${form.maCode.toUpperCase()}" thành công!`);
       } else {
-        await axios.post("http://localhost:5000/api/discounts", form);
+        await axios.post(`${API_BASE}/discounts`, form);
         setNotice(
           `Đã tạo chiến dịch mã "${form.maCode.toUpperCase()}" (Yêu cầu tối thiểu ${form.diemToiThieu} điểm) thành công!`
         );
@@ -156,7 +157,7 @@ export default function DiscountManagement({ currentRole }) {
     );
 
     try {
-      await axios.patch(`http://localhost:5000/api/discounts/${id}/status`, {
+      await axios.patch(`${API_BASE}/discounts/${id}/status`, {
         trangThai: nextStatus,
       });
       setNotice(
@@ -176,7 +177,7 @@ export default function DiscountManagement({ currentRole }) {
   const handleDelete = async (id, code) => {
     if (!window.confirm(`Bạn có chắc chắn muốn xóa mã giảm giá "${code}" không?`)) return;
     try {
-      await axios.delete(`http://localhost:5000/api/discounts/${id}`);
+      await axios.delete(`${API_BASE}/discounts/${id}`);
       setNotice(`Đã xóa thành công mã "${code}"!`);
       fetchDiscounts();
     } catch (err) {

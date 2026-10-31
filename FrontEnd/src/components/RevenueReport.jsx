@@ -9,8 +9,7 @@ import {
 } from "lucide-react";
 import RevenuePdfReportModal from "./RevenuePdfReportModal";
 import "../../css/staff.css";
-
-const API_BASE = "http://localhost:5000/api";
+import { API_BASE } from "../config/api";
 const INK     = "#0f172a";
 const INK_MUT = "#64748b";
 const INDIGO  = "#4f46e5";

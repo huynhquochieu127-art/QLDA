@@ -3,6 +3,7 @@ import axios from "axios";
 import "../../css/pos.css";
 import PosSuggestions from "./PosSuggestions";
 import PosDiscountCode from "./PosDiscountCode";
+import { API_BASE, API_ORIGIN, getFullImageUrl } from "../config/api";
 
 const CATEGORIES = [
   { id: "all", name: "Tất cả" },
@@ -159,7 +160,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
 
       const timer = setTimeout(async () => {
         try {
-          const res = await fetch(`http://localhost:5000/api/customers?search=${cleanPhone}&limit=10`);
+          const res = await fetch(`${API_BASE}/customers?search=${cleanPhone}&limit=10`);
           if (res.ok) {
             const json = await res.json();
             const list = json.data || (Array.isArray(json) ? json : []);
@@ -227,12 +228,7 @@ export default function PosOrder({ selectedTableProp, onNavigateToTables }) {
     alert(`Đã tạo thành công khách hàng ${createdCustomer.name}`);
   };
 
-const getProductImageUrl = (img) => {
-  if (!img) return "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=200";
-  if (img.startsWith("http://") || img.startsWith("https://") || img.startsWith("data:")) return img;
-  if (img.startsWith("/")) return `http://localhost:5000${img}`;
-  return `http://localhost:5000/${img}`;
-};
+const getProductImageUrl = (img) => getFullImageUrl(img);
 
   // State danh sách đồ uống từ CSDL
   const [posProducts, setPosProducts] = useState(PRODUCTS);
@@ -242,7 +238,7 @@ const getProductImageUrl = (img) => {
   const fetchPosProducts = useCallback(async () => {
     setLoadingProducts(true);
     try {
-      const res = await axios.get("http://localhost:5000/api/products?availableOnly=true");
+      const res = await axios.get(`${API_BASE}/products?availableOnly=true`);
       if (Array.isArray(res.data) && res.data.length > 0) {
         const mapped = res.data
           .filter((p) => p.is_active !== 0) // Lọc bỏ tuyệt đối những món "Hết hàng"
@@ -342,7 +338,10 @@ const getProductImageUrl = (img) => {
     0,
   );
   const discountAmount = appliedDiscount
-    ? Math.min(appliedDiscount.discountAmount, subtotal)
+    ? Math.min(
+        Number(appliedDiscount.discountAmount ?? appliedDiscount.amount ?? 0),
+        subtotal
+      )
     : 0;
   const totalAmount = Math.max(0, subtotal - discountAmount);
 
@@ -362,7 +361,7 @@ const getProductImageUrl = (img) => {
     setDiscountError("");
 
     try {
-      const res = await fetch("http://localhost:5000/api/discounts/validate", {
+      const res = await fetch(`${API_BASE}/discounts/validate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -464,7 +463,7 @@ const getProductImageUrl = (img) => {
       // Lấy MaBan từ tên bàn đang chọn (ví dụ "T3" -> cần tìm ID)
       let maBan = null;
       try {
-        const tablesRes = await fetch("http://localhost:5000/api/tables");
+        const tablesRes = await fetch(`${API_BASE}/tables`);
         const tablesData = await tablesRes.json();
         const matched = tablesData.find(
           (t) =>
@@ -476,7 +475,7 @@ const getProductImageUrl = (img) => {
       } catch (_) {}
 
       // 1. Gọi API checkout (lưu đơn hàng + chi tiết vào MySQL)
-      const res = await fetch("http://localhost:5000/api/checkout", {
+      const res = await fetch(`${API_BASE}/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -508,7 +507,7 @@ const getProductImageUrl = (img) => {
 
       // 2. Cập nhật trạng thái bàn -> CO_KHACH và Emit realtime Socket.IO
       if (maBan) {
-        await fetch(`http://localhost:5000/api/tables/${maBan}/status`, {
+        await fetch(`${API_BASE}/tables/${maBan}/status`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ trangThai: "CO_KHACH" }),
@@ -762,83 +761,6 @@ const getProductImageUrl = (img) => {
         {/* Món gọi kèm gợi ý từ AI (QH-95) */}
         <PosSuggestions cart={cart} products={PRODUCTS} onAdd={addToCart} />
 
-        {/* Khu vực Nhập mã giảm giá & Ràng buộc Mốc điểm */}
-        <div style={{ padding: "12px", background: "#f8fafc", borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", margin: "10px 0", borderRadius: "8px" }}>
-          <div style={{ fontSize: "12px", fontWeight: 700, color: "#475569", marginBottom: "6px" }}>
-            🎟️ Mã Giảm Giá / Khuyến Mãi
-          </div>
-
-          {appliedDiscount ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "6px" }}>
-              <div>
-                <strong style={{ color: "#166534" }}>{appliedDiscount.code}</strong>: -{appliedDiscount.discountAmount.toLocaleString("vi-VN")} đ
-                {appliedDiscount.minPoints > 0 && (
-                  <span style={{ fontSize: "11px", color: "#15803d", marginLeft: "6px" }}>
-                    (Yêu cầu: {appliedDiscount.minPoints}đ - Đủ ĐK)
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={handleRemoveDiscount}
-                style={{ background: "none", border: "none", color: "#b91c1c", fontWeight: 700, cursor: "pointer", fontSize: "16px" }}
-                title="Gỡ mã giảm giá"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: "flex", gap: "6px" }}>
-              <input
-                type="text"
-                placeholder="Nhập mã (VD: GIAM10%, TRU20K)..."
-                value={discountInput}
-                onChange={(e) => {
-                  setDiscountInput(e.target.value.toUpperCase());
-                  if (discountError) setDiscountError("");
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleApplyDiscount();
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  padding: "7px 10px",
-                  borderRadius: "6px",
-                  border: "1px solid #cbd5e1",
-                  fontSize: "13px",
-                  textTransform: "uppercase",
-                  fontWeight: 600,
-                }}
-              />
-              <button
-                type="button"
-                disabled={validatingDiscount}
-                onClick={handleApplyDiscount}
-                style={{
-                  padding: "7px 14px",
-                  background: "#7c3aed",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  fontSize: "13px",
-                }}
-              >
-                {validatingDiscount ? "..." : "Áp dụng"}
-              </button>
-            </div>
-          )}
-
-          {discountError && (
-            <div style={{ fontSize: "12px", color: "#dc2626", marginTop: "6px", fontWeight: 500, lineHeight: 1.3 }}>
-              ⚠️ {discountError}
-            </div>
-          )}
-        </div>
 
         {/* Tổng tiền & Thanh toán */}
         <div className="sidebar-footer">

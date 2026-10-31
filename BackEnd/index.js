@@ -98,19 +98,8 @@ startMonthlyTimesheetJob();
 // Lấy Secret Key từ .env hoặc fallback
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_key";
 
-// Kết nối MySQL Database (Tối ưu connection pool cho Clever Cloud max 5 connections)
-const db = mysql.createPool({
-  host: process.env.DB_HOST || "localhost",
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "12345",
-  database: process.env.DB_NAME || "dacnpm",
-  port: parseInt(process.env.DB_PORT || "3306", 10),
-  waitForConnections: true,
-  connectionLimit: 2,
-  maxIdle: 1,
-  idleTimeout: 10000,
-  queueLimit: 0,
-});
+// Kết nối MySQL Database (Dùng chung pool từ config/db để không bị vượt max_user_connections)
+const db = require("./config/db");
 
 const employeeController = require("./controllers/employeeController");
 if (employeeController.ensureEmployeeSchema) {
@@ -688,6 +677,21 @@ app.post("/api/checkout", async (req, res) => {
       pointsResult = await awardPointsOnPayment(connection, orderId);
     } catch (ptErr) {
       console.warn("Lỗi tích điểm checkout:", ptErr.message);
+    }
+
+    // 4.1. Tăng số lần sử dụng của mã giảm giá (nếu có áp dụng)
+    if (maGiamGia) {
+      try {
+        const cleanMG = String(maGiamGia).trim().toUpperCase();
+        await connection.query(
+          `UPDATE mamgiamgia 
+           SET SoLanDung = SoLanDung + 1 
+           WHERE UPPER(MaCode) = ? OR UPPER(REPLACE(MaCode, '%', '')) = ?`,
+          [cleanMG, cleanMG.replace(/%/g, "")]
+        );
+      } catch (mgErr) {
+        console.warn("Lỗi cập nhật lượt dùng mã giảm giá:", mgErr.message);
+      }
     }
 
     await connection.commit();
@@ -1324,7 +1328,27 @@ app.delete("/api/employees/:id", async (req, res) => {
   }
 });
 
-const PORT = 5000;
-app.listen(PORT, () => {
+// ── Phục vụ FrontEnd khi deploy chung (Render / Monolith) ────────────────────
+const frontEndDist = path.join(__dirname, "../FrontEnd/dist");
+if (fs.existsSync(frontEndDist)) {
+  app.use(express.static(frontEndDist));
+  app.use((req, res, next) => {
+    // Điều hướng GET & HEAD request không phải API, uploads hoặc socket.io về index.html
+    if (
+      (req.method === "GET" || req.method === "HEAD") &&
+      !req.path.startsWith("/api") &&
+      !req.path.startsWith("/uploads") &&
+      !req.path.startsWith("/socket.io")
+    ) {
+      return res.sendFile(path.join(frontEndDist, "index.html"));
+    }
+    next();
+  });
+}
+
+// ── Khởi động HTTP Server kèm Socket.IO ────────────────────────────────────────
+const PORT = process.env.PORT || 5000;
+httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server BackEnd đang chạy tại: http://localhost:${PORT}`);
+  console.log(`🔌 Socket.IO sẵn sàng đón nhận kết nối realtime`);
 });

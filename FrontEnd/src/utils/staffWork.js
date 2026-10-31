@@ -1,6 +1,7 @@
 // Tiện ích dùng chung cho các màn hình nhân viên (đăng ký ca, chấm công, bảng công, phiếu lương)
 
-export const API_BASE = "http://localhost:5000/api";
+import { API_BASE as CONFIG_API_BASE } from "../config/api";
+export const API_BASE = CONFIG_API_BASE;
 
 // 3 ca làm việc tiêu chuẩn (đồng bộ với màn hình Duyệt ca QH-39)
 export const SHIFTS = [

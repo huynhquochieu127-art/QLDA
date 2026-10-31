@@ -25,5 +25,7 @@ router.delete("/discounts/:id", discountController.deleteDiscount);
 // [POST] Kiểm tra tính hợp lệ & điều kiện mốc điểm của mã giảm giá khi order tại POS
 router.post("/discounts/validate", discountController.validateDiscount);
 router.post("/discounts/check", discountController.validateDiscount);
+router.post("/discounts/apply", discountController.validateDiscount);
+router.post("/khuyen-mai/ap-dung", discountController.validateDiscount);
 
 module.exports = router;
