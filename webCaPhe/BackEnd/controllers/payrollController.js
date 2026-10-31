@@ -64,8 +64,8 @@ exports.ensurePayrollSchema = ensurePayrollSchema;
 /**
  * Hàm lõi tính lương nội bộ
  * Quy tắc tính lương:
- * - Part-time: Tổng lương = Số giờ làm thực tế x Mức lương theo giờ (QH-29).
- * - Full-time: Tổng lương = Lương cứng (QH-28) - (Số ngày nghỉ không phép x Phạt) + Thưởng (nếu có).
+ * - Part-time: ổng lương = (Số giờ làm × Lương/giờ) - (Số lần trễ × 20.000đ) + Thưởng
+ * - Full-time: Tổng lương = Tổng lương = Lương cứng - (Nghỉ không phép × Lương ngày) - (Số lần trễ × 20.000đ) + Thưởng chuyên cần
  * @param {number} thang
  * @param {number} nam
  * @param {object} options
@@ -147,22 +147,24 @@ async function runPayrollCalculationInternal(thang, nam, options = {}) {
       // =========================================================================
       const mucLuongGio = rawLuong > 0 ? rawLuong : 30000; // Mức lương theo giờ (VNĐ/h)
       luongCoBan = mucLuongGio;
-      tongLuong = Math.round(soGioLam * mucLuongGio);
+      const tienPhatTre = soNgayTre * LATE_PENALTY;
+      tienPhat = tienPhatTre;
+      khauTru = tienPhat;
+      tongLuong = Math.max(0, Math.round(soGioLam * mucLuongGio) - tienPhat);
       thuong = soGioLam >= 120 ? 300000 : 0; // Thưởng chuyên cần vượt giờ nếu có
-      khauTru = 0;
       soNgayNghiKhongPhep = 0;
-      tienPhat = 0;
 
       ghiChu = `Part-time (QH-29): ${soGioLam} giờ làm thực tế x ${mucLuongGio.toLocaleString('vi-VN')}đ/giờ` +
+        (soNgayTre > 0 ? ` - (Phạt đi trễ: ${soNgayTre} lần x ${LATE_PENALTY.toLocaleString('vi-VN')}đ)` : "") +
         (thuong > 0 ? ` + Thưởng vượt giờ ${thuong.toLocaleString('vi-VN')}đ` : "") +
-        ` = ${tongLuong.toLocaleString('vi-VN')}đ`;
+        ` = ${(tongLuong + thuong).toLocaleString('vi-VN')}đ`;
 
       if (thuong > 0) {
         tongLuong += thuong;
       }
     } else {
       // =========================================================================
-      // 2. FULL-TIME: Tổng lương = Lương cứng (QH-28) - (Số ngày nghỉ không phép x Phạt) + Thưởng (nếu có)
+      // 2. FULL-TIME: Tổng lương = Lương cứng (QH-28) - (Số ngày nghỉ không phép x Phạt) - (Số lần trễ x Phạt) + Thưởng (nếu có)
       // =========================================================================
       const luongCung = rawLuong >= 1000000 ? rawLuong : 8000000; // Lương cứng Full-time
       luongCoBan = luongCung;
@@ -183,7 +185,9 @@ async function runPayrollCalculationInternal(thang, nam, options = {}) {
 
       // Mức phạt cho 1 ngày nghỉ không phép: Lương 1 ngày công (Lương cứng / 26)
       mucPhatMoiNgay = Math.round(luongCung / STANDARD_WORK_DAYS);
-      tienPhat = soNgayNghiKhongPhep * mucPhatMoiNgay;
+      const tienPhatNghi = soNgayNghiKhongPhep * mucPhatMoiNgay;
+      const tienPhatTre = soNgayTre * LATE_PENALTY;
+      tienPhat = tienPhatNghi + tienPhatTre;
 
       // Thưởng chuyên cần & hiệu suất (nếu có)
       if (soNgayNghiKhongPhep === 0 && soNgayTre === 0) {
@@ -199,7 +203,12 @@ async function runPayrollCalculationInternal(thang, nam, options = {}) {
       khauTru = tienPhat;
       tongLuong = Math.max(0, Math.round(luongCung - tienPhat + thuong));
 
-      ghiChu = `Full-time (QH-28): Lương cứng ${luongCung.toLocaleString('vi-VN')}đ - (Nghỉ không phép: ${soNgayNghiKhongPhep} ngày x ${mucPhatMoiNgay.toLocaleString('vi-VN')}đ) + Thưởng: ${thuong.toLocaleString('vi-VN')}đ = ${tongLuong.toLocaleString('vi-VN')}đ`;
+      const chiTietPhat = [];
+      if (soNgayNghiKhongPhep > 0) chiTietPhat.push(`Nghỉ KP: ${soNgayNghiKhongPhep} ngày x ${mucPhatMoiNgay.toLocaleString('vi-VN')}đ`);
+      if (soNgayTre > 0) chiTietPhat.push(`Đi trễ: ${soNgayTre} lần x ${LATE_PENALTY.toLocaleString('vi-VN')}đ`);
+      const phatText = chiTietPhat.length > 0 ? ` - (${chiTietPhat.join(" + ")})` : "";
+
+      ghiChu = `Full-time (QH-28): Lương cứng ${luongCung.toLocaleString('vi-VN')}đ${phatText} + Thưởng: ${thuong.toLocaleString('vi-VN')}đ = ${tongLuong.toLocaleString('vi-VN')}đ`;
     }
 
     const tongCaLam = Math.round(soCong) || Math.round(soGioLam / 5) || 0;
