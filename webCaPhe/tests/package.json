@@ -22,7 +22,15 @@
     "test:points": "playwright test pos-member-points.spec.js --headed",
     "test:points:headless": "playwright test pos-member-points.spec.js",
     "test:export": "playwright test report-export-excel.spec.js --headed",
-    "test:export:headless": "playwright test report-export-excel.spec.js"
+    "test:export:headless": "playwright test report-export-excel.spec.js",
+    "test:pdf": "playwright test report-invoice-export-pdf.spec.js --headed",
+    "test:pdf:headless": "playwright test report-invoice-export-pdf.spec.js",
+    "test:import": "playwright test employee-import-excel-success.spec.js --headed",
+    "test:import:headless": "playwright test employee-import-excel-success.spec.js",
+    "test:importerr": "playwright test employee-import-excel-validation.spec.js --headed",
+    "test:importerr:headless": "playwright test employee-import-excel-validation.spec.js",
+    "test:unauth": "playwright test rbac-unauthorized-access.spec.js --headed",
+    "test:unauth:headless": "playwright test rbac-unauthorized-access.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0"
