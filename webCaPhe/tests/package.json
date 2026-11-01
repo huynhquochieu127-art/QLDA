@@ -8,7 +8,9 @@
     "test:pos": "playwright test pos-order.spec.js --headed",
     "test:pos:headless": "playwright test pos-order.spec.js",
     "test:menu": "playwright test menu-product.spec.js --headed",
-    "test:menu:headless": "playwright test menu-product.spec.js"
+    "test:menu:headless": "playwright test menu-product.spec.js",
+    "test:validate": "playwright test product-validation.spec.js --headed",
+    "test:validate:headless": "playwright test product-validation.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0"
