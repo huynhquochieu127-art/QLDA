@@ -1,5 +1,6 @@
 const { test, expect } = require("@playwright/test");
 const path = require("path");
+const fs = require("fs");
 
 /**
  * ============================================================================
@@ -61,6 +62,22 @@ test.describe("QH-122: Admin thêm món mới thành công vào Menu thực đơ
     console.log("==================================================================");
 
     await loginAsAdmin(page);
+
+    // Giả lập (Mock) upload ảnh: Trả về URL thành công tức thì, KHÔNG lưu file rác vào ổ đĩa Backend
+    await page.route("**/api/products/upload-image", async (route) => {
+      console.log("[Mock Storage] Giả lập upload ảnh lên CDN thành công, không lưu file rác vào ổ đĩa.");
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          imageUrl: "https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=200",
+          filename: "tra-dao.png",
+          message: "Upload ảnh thành công!",
+        }),
+      });
+    });
+
     await page.goto(`${FRONTEND_URL}/home`);
     await page.waitForTimeout(1000);
 
@@ -185,7 +202,6 @@ test.describe("QH-122: Admin thêm món mới thành công vào Menu thực đơ
     console.log("--- BẮT ĐẦU TC03: KIỂM THỬ TRỰC TIẾP API UPLOAD ẢNH VÀ TẠO SẢN PHẨM ---");
     console.log("==================================================================");
 
-    const fs = require("fs");
     const imageBuffer = fs.readFileSync(SAMPLE_IMAGE_PATH);
 
     // 1. Gửi request upload ảnh multipart tới /api/products/upload-image
@@ -225,6 +241,21 @@ test.describe("QH-122: Admin thêm món mới thành công vào Menu thực đơ
     console.log("[API Create Product]", createData);
     expect(createData.message).toContain("Thêm sản phẩm thành công!");
     expect(createData.id).toBeDefined();
+
+    // Dọn dẹp bản ghi test và ảnh tạm để giữ CSDL luôn sạch sẽ 100%
+    if (createData.id) {
+      await request.delete(`${API_URL}/products/${createData.id}`).catch(() => {});
+      console.log(`[Dọn dẹp CSDL] Đã tự động xóa bản ghi test (ID: ${createData.id}) giữ CSDL sạch sẽ.`);
+    }
+
+    // Xóa file ảnh tạm vừa upload trong uploads/products nếu có
+    if (uploadData.filename) {
+      const uploadedFilePath = path.join(__dirname, "..", "BackEnd", "uploads", "products", uploadData.filename);
+      if (fs.existsSync(uploadedFilePath)) {
+        fs.unlinkSync(uploadedFilePath);
+        console.log(`[Dọn dẹp Ổ đĩa] Đã tự động xóa file ảnh test tạm: ${uploadData.filename}`);
+      }
+    }
 
     console.log("--- HOÀN THÀNH TC03: PASSED (API UPLOAD ẢNH & TẠO SẢN PHẨM HOÀN HẢO) ---\n");
   });
