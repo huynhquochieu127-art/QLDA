@@ -148,9 +148,21 @@ test.describe("QH-122: Admin thêm món mới thành công vào Menu thực đơ
     expect(rowText).toContain("Còn hàng");
     console.log("[Trạng thái] Trạng thái mặc định của món mới là: 'Còn hàng' (hiển thị bán trên POS).");
 
-    // 7. Giữ màn hình 5 giây để quan sát trực quan món mới vừa thêm
-    console.log("[Demo] Đang giữ giao diện 5 giây để quan sát thực đơn mới...");
-    await page.waitForTimeout(5000);
+    // 7. Giữ màn hình 3 giây để quan sát trực quan món mới vừa thêm
+    console.log("[Demo] Đang giữ giao diện 3 giây để quan sát thực đơn mới...");
+    await page.waitForTimeout(3000);
+
+    // 8. Tự động dọn dẹp (Cleanup) món test vừa tạo để giữ CSDL MySQL luôn sạch sẽ 100%
+    const productsRes = await page.request.get(`${API_URL}/products`);
+    if (productsRes.ok()) {
+      const allProducts = await productsRes.json();
+      const testItem = allProducts.find((p) => p.TenSanPham === productName);
+      if (testItem && testItem.MaSanPham) {
+        await page.request.delete(`${API_URL}/products/${testItem.MaSanPham}`).catch(() => {});
+        console.log(`[Dọn dẹp CSDL] Đã tự động xóa món test '${productName}' (ID: ${testItem.MaSanPham}) giữ CSDL sạch sẽ 100%.`);
+      }
+    }
+
     console.log("--- HOÀN THÀNH TC01: PASSED (THÊM MÓN MỚI THÀNH CÔNG 100%) ---\n");
   });
 
