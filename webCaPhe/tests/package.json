@@ -10,7 +10,11 @@
     "test:menu": "playwright test menu-product.spec.js --headed",
     "test:menu:headless": "playwright test menu-product.spec.js",
     "test:validate": "playwright test product-validation.spec.js --headed",
-    "test:validate:headless": "playwright test product-validation.spec.js"
+    "test:validate:headless": "playwright test product-validation.spec.js",
+    "test:toggle": "playwright test pos-menu-toggle.spec.js --headed",
+    "test:toggle:headless": "playwright test pos-menu-toggle.spec.js",
+    "test:ai": "playwright test pos-ai-upselling.spec.js --headed",
+    "test:ai:headless": "playwright test pos-ai-upselling.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0"
