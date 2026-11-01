@@ -6,7 +6,9 @@
     "test:auth": "playwright test auth-rbac.spec.js --headed",
     "test:auth:headless": "playwright test auth-rbac.spec.js",
     "test:pos": "playwright test pos-order.spec.js --headed",
-    "test:pos:headless": "playwright test pos-order.spec.js"
+    "test:pos:headless": "playwright test pos-order.spec.js",
+    "test:menu": "playwright test menu-product.spec.js --headed",
+    "test:menu:headless": "playwright test menu-product.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0"
