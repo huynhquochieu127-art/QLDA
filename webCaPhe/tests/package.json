@@ -4,7 +4,9 @@
     "test:headed": "playwright test --headed",
     "test:payroll": "playwright test shift-and-payroll.spec.js --headed",
     "test:auth": "playwright test auth-rbac.spec.js --headed",
-    "test:auth:headless": "playwright test auth-rbac.spec.js"
+    "test:auth:headless": "playwright test auth-rbac.spec.js",
+    "test:pos": "playwright test pos-order.spec.js --headed",
+    "test:pos:headless": "playwright test pos-order.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0"
